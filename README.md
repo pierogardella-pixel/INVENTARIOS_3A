@@ -4,9 +4,9 @@ Dashboard de control de inventarios para 8 pasillos, rondas editables, ERI, ERU,
 
 **Página:** https://pierogardella-pixel.github.io/INVENTARIOS_3A/
 
-**URL de Apps Script configurada en la web:** https://script.google.com/macros/s/AKfycbwJYbQdylE2gIFwlxKMJlwJjl5lAXG_7qe5Ux0u5M64cPjfCUMmkzhGo3TctG0IFHlS/exec
+**URL de Apps Script:** pendiente de crear desde la nueva hoja.
 
-**Base de Google Sheets (creada):** https://docs.google.com/spreadsheets/d/1XhRYp1LJJdieQqS-TaZ-m3CD4dB9O_d54IfsdnZc7V0/edit
+**Base de Google Sheets (creada):** https://docs.google.com/spreadsheets/d/16pbpTW88QazyegjnTfVUeFKZyK1N_wCJexV_9tyPMTw/edit
 
 > La web está publicada y la URL de Apps Script ya está preconfigurada; **la sincronización no se completará hasta autorizar el servicio y publicar el primer inventario cifrado**. La página no puede escribir directamente en una hoja privada sin un servicio autorizado. No se necesita token de GitHub.
 
