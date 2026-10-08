@@ -9,7 +9,7 @@
  * ORIGIN = https://pierogardella-pixel.github.io
  */
 const HISTORIAL_SHEET = 'VERSIONES_CIFRADAS';
-const DEFAULT_SPREADSHEET_ID = '1XhRYp1LJJdieQqS-TaZ-m3CD4dB9O_d54IfsdnZc7V0';
+const DEFAULT_SPREADSHEET_ID = '16pbpTW88QazyegjnTfVUeFKZyK1N_wCJexV_9tyPMTw';
 const CHUNK_SIZE = 30000;
 const MAX_PAYLOAD_SIZE = 6000000;
 
