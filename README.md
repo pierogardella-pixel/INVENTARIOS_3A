@@ -4,9 +4,11 @@ Dashboard de control de inventarios para 8 pasillos, rondas editables, ERI, ERU,
 
 **Página:** https://pierogardella-pixel.github.io/INVENTARIOS_3A/
 
+**URL de Apps Script configurada en la web:** https://script.google.com/macros/s/AKfycbwJYbQdylE2gIFwlxKMJlwJjl5lAXG_7qe5Ux0u5M64cPjfCUMmkzhGo3TctG0IFHlS/exec
+
 **Base de Google Sheets (creada):** https://docs.google.com/spreadsheets/d/1XhRYp1LJJdieQqS-TaZ-m3CD4dB9O_d54IfsdnZc7V0/edit
 
-> La web está publicada, pero **la sincronización no comenzará hasta desplegar Apps Script**. La página no puede escribir directamente en una hoja privada sin un servicio autorizado. No se necesita token de GitHub.
+> La web está publicada y la URL de Apps Script ya está preconfigurada; **la sincronización no se completará hasta autorizar el servicio y publicar el primer inventario cifrado**. La página no puede escribir directamente en una hoja privada sin un servicio autorizado. No se necesita token de GitHub.
 
 ## Paso 1. Crear el servicio de Google Apps Script
 
@@ -25,7 +27,7 @@ Dashboard de control de inventarios para 8 pasillos, rondas editables, ERI, ERU,
 ## Paso 2. Conectar el dashboard como administrador
 
 1. Abre https://pierogardella-pixel.github.io/INVENTARIOS_3A/ e ingresa a **DATOS**.
-2. Pega la URL `https://script.google.com/macros/s/…/exec`.
+2. La URL de Apps Script se completa automáticamente; verifica que sea la correcta.
 3. Elige **Administrador · carga de datos**.
 4. Escribe una **clave de lectura distinta** de la contraseña de administrador; mínimo 16 caracteres, recomendable una frase larga y aleatoria. Esa clave cifra los datos en tu navegador.
 5. En **Clave de administrador**, escribe exactamente el valor de `ADMIN_WRITE_KEY` guardado en Apps Script.
