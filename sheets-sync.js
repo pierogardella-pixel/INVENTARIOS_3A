@@ -41,6 +41,55 @@ async function jsonp(){
  }
  throw Error(last.message+". Comprueba el botón «Probar Apps Script» y vuelve a implementar la versión actual con acceso «Cualquiera».");
 }
+
+/* La lectura principal usa HtmlService y postMessage, para evitar los 404 del
+   redireccionamiento ContentService documentados por Google. */
+var readTransport="auto";
+function allowedGoogleOrigin(origin){
+ return origin==="https://script.google.com" ||
+        origin==="https://script.googleusercontent.com" ||
+        /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com$/i.test(origin);
+}
+function iframeRead(){
+ return new Promise((resolve,reject)=>{
+  var reqId="read"+Date.now().toString(36)+Math.random().toString(36).slice(2),
+      iframe=document.createElement("iframe"),done=false,wait=null;
+  iframe.style.cssText="position:absolute;width:0;height:0;border:0;opacity:0;pointer-events:none";
+  iframe.setAttribute("aria-hidden","true");
+  iframe.tabIndex=-1;
+  var timeout=setTimeout(()=>end(Error("Apps Script no respondió mediante la lectura web")),18000);
+  function end(err,val){
+    if(done)return;
+    done=true;clearTimeout(timeout);if(wait)clearTimeout(wait);
+    removeEventListener("message",listener);iframe.remove();
+    if(err)reject(err);else resolve(val);
+  }
+  function listener(evt){
+    if(!allowedGoogleOrigin(evt.origin))return;
+    var msg=evt.data;
+    if(!msg||msg.type!=="inventarios3a-sheets-read"||msg.requestId!==reqId)return;
+    if(!msg.result||!msg.result.ok)end(Error(msg.result&&msg.result.error||"La base compartida devolvió un error"));
+    else end(null,msg.result);
+  }
+  addEventListener("message",listener);
+  iframe.onload=function(){
+    if(!done)wait=setTimeout(()=>end(Error("La aplicación publicada aún no utiliza lectura HTML. Actualiza el código Apps Script y despliega una nueva versión")),5500);
+  };
+  iframe.src=endpoint+"?requestId="+encodeURIComponent(reqId)+"&v="+Date.now();
+  document.body.appendChild(iframe);
+ })
+}
+async function readLatest(){
+ if(readTransport==="jsonp"){
+   try{return await jsonp()}catch(e){readTransport="auto"}
+ }
+ try{var response=await iframeRead();readTransport="iframe";return response}
+ catch(err){
+   try{var fallback=await jsonp();readTransport="jsonp";return fallback}
+   catch(e){throw Error("La lectura de Google Sheets falló: "+err.message+"; respaldo anterior: "+e.message)}
+ }
+}
+
 function openStore(){return new Promise((resolve,reject)=>{var r=indexedDB.open(KEY_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore("settings");r.onerror=()=>reject(r.error);r.onsuccess=()=>resolve(r.result)})}
 async function rememberKey(){try{var k=await masterKey(),db=await openStore();await new Promise((a,b)=>{var tx=db.transaction("settings","readwrite");tx.objectStore("settings").put(k,"viewerKey");tx.oncomplete=a;tx.onerror=()=>b(tx.error)});db.close();return true}catch(e){return false}}
 async function recallKey(){try{var db=await openStore(),v=await new Promise((a,b)=>{var tx=db.transaction("settings","readonly"),r=tx.objectStore("settings").get("viewerKey");r.onsuccess=()=>a(r.result||null);r.onerror=()=>b(r.error)});db.close();return v}catch(e){return null}}
@@ -58,7 +107,7 @@ async function applyRemote(obj){
 }
 async function checkRemote(force){
  if(!endpoint)return;
- var d=await jsonp();latest(d);
+ var d=await readLatest();latest(d);
  if(!connected)return;
  if(!d.exists){if(force)status("Sin inventarios publicados todavía","warning");return}
  if(d.revision===serverRevision)return;
@@ -80,7 +129,7 @@ async function connect(){
  if(pwd){material=null;readSecret=pwd}
  writerSecret=role==="admin"?write:"";
  status("Conectando con Google Sheets…","warning");
- var result=await jsonp();latest(result);
+ var result=await readLatest();latest(result);
  if(result.exists){
   var remote=await decryptState(result.pack);
   var extra=role==="admin"&&state.sessions.length>remote.sessions.length;
@@ -106,10 +155,10 @@ function iframePost(formData,revision){
    var settled=false;
    var timeout=setTimeout(()=>end(Error("Tiempo de espera agotado. Comprueba la última versión antes de volver a guardar.")),75000);
    function end(err,val){if(settled)return;settled=true;clearTimeout(timeout);clearInterval(confirmTimer);removeEventListener("message",listener);form.remove();iframe.remove();if(err)reject(err);else resolve(val)}
-   function listener(event){if(!FRAME_ORIGINS.includes(event.origin))return;var msg=event.data;if(!msg||msg.type!=="inventarios3a-sheets-result"||msg.requestId!==reqId)return;if(!msg.result||!msg.result.ok)end(Error(msg.result&&msg.result.error||"El servidor rechazó la carga"));else end(null,msg.result)}
+   function listener(event){if(!allowedGoogleOrigin(event.origin))return;var msg=event.data;if(!msg||msg.type!=="inventarios3a-sheets-result"||msg.requestId!==reqId)return;if(!msg.result||!msg.result.ok)end(Error(msg.result&&msg.result.error||"El servidor rechazó la carga"));else end(null,msg.result)}
    addEventListener("message",listener);
    // La confirmación se verifica también leyendo la versión publicada: el navegador puede bloquear mensajes del iframe.
-   var confirmTimer=setInterval(async()=>{if(settled)return;try{var r=await jsonp();if(r.exists&&r.revision===revision)end(null,{ok:true,revision:revision,savedAt:r.savedAt})}catch(e){}},4500);
+   var confirmTimer=setInterval(async()=>{if(settled)return;try{var r=await readLatest();if(r.exists&&r.revision===revision)end(null,{ok:true,revision:revision,savedAt:r.savedAt})}catch(e){}},4500);
    try{form.submit()}catch(e){end(e)}
  })
 }
@@ -119,7 +168,7 @@ async function publish(manual){
  syncBusy=true;
  status("Cifrando y guardando inventarios en Google Sheets…","warning");
  try{
-  var prev=await jsonp();latest(prev);
+  var prev=await readLatest();latest(prev);
   if(prev.exists&&prev.revision!==serverRevision)throw Error("Otra versión más reciente está publicada. No se sobrescribió. Recarga los datos y revisa el historial.");
   if(!prev.exists&&serverRevision)throw Error("El historial publicado cambió. Comprueba DATOS antes de guardar.");
   var obj=JSON.parse(JSON.stringify(state)),pack=await encryptState(obj),bytes=JSON.stringify(pack).length;
@@ -149,7 +198,7 @@ async function init(){
  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&connected)checkRemote(false).catch(()=>{})});
  if(!x.value){status("Sin URL configurada · revisa la conexión de Google Sheets","warning");latest(null);return}
  endpoint=x.value;
- try{var data=await jsonp();latest(data);status(data.exists?"Hay datos en Google Sheets · conecta para consultarlos":"Google Sheets conectado · sin inventarios publicados","warning")}
+ try{var data=await readLatest();latest(data);status(data.exists?"Hay datos en Google Sheets · conecta para consultarlos":"Google Sheets conectado · sin inventarios publicados","warning")}
  catch(e){status("No se pudo consultar Google Sheets: "+e.message,"error")}
  try{
   var key=await recallKey();
