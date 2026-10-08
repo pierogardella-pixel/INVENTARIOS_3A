@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 var CONFIG="inventarios3a_sheets_url_v1",KEY_DB="inventarios3a_viewer_keys_v1",FRAME_ORIGINS=["https://script.google.com","https://script.googleusercontent.com"];
-var DEFAULT_ENDPOINT="https://script.google.com/macros/s/AKfycbyBDIc-ySOlZnTS-0GNxxM4WhVa3tM5xWTDA9NDsPUn-aBgFK3s4gZczE4LXqzt2tKB/exec";
+var DEFAULT_ENDPOINT="https://script.google.com/macros/s/AKfycbwYGP9wz_9sjrWNiWK4PX5X1SZGAtrC0wnxN-_5LbmaudbxufAJspNmIeS52DwH69iJ/exec";
 var endpoint="",readSecret="",writerSecret="",material=null,role="viewer",connected=false,serverRevision="",syncBusy=false,pending=false,loadingShared=false,muted=false,interval=null,debounce=null,lastKnown=null,verifyTimer=null;
 const el=id=>document.getElementById(id);
 function status(t,kind){var x=el("cloudStatus");if(x){x.textContent=t;x.dataset.kind=kind||"warning"}}
