@@ -46,19 +46,36 @@ function latest_() {
   if (pack.format !== 'inventario-3a-aesgcm-v1' || pack.revision !== rev) throw Error('Formato cifrado inválido');
   return {ok:true,exists:true,revision:rev,savedAt:pack.savedAt,pack:pack};
 }
+
+/**
+ * Lectura por HTML Service (en lugar de ContentService).
+ * Apps Script ContentService puede fallar al redireccionar a googleusercontent
+ * con 404 intermitentes incluso si la ejecución termina correctamente.
+ * La respuesta es exclusivamente un paquete cifrado y se envía al origen autorizado.
+ */
 function doGet(e) {
-  try {
-    const cb = String((e && e.parameter && e.parameter.callback) || '');
-    if (!/^uca3aCallback_[A-Za-z0-9_]{6,80}$/.test(cb)) throw Error('Callback inválido');
-    const last = latest_();
-    const body = cb + '(' + JSON.stringify(last) + ');';
-    return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JAVASCRIPT);
-  } catch (err) {
-    const cb = String((e && e.parameter && e.parameter.callback) || '');
-    if (!/^uca3aCallback_[A-Za-z0-9_]{6,80}$/.test(cb)) return ContentService.createTextOutput('/* callback inválido */').setMimeType(ContentService.MimeType.JAVASCRIPT);
-    return ContentService.createTextOutput(cb+'('+JSON.stringify({ok:false,error:String(err.message||err)})+');').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  const p=(e && e.parameter)||{};
+  const requestId=String(p.requestId||'');
+  const isBridge=/^[A-Za-z0-9_-]{8,80}$/.test(requestId);
+  let result;
+  try {result=latest_()}catch(err){result={ok:false,error:String(err && err.message || err)}}
+  const origin=properties_().origin;
+  if (!isBridge) {
+    const ok=!!(result && result.ok);
+    const safeMsg=ok
+      ? (result.exists ? 'Base disponible · hay versiones de inventario cifradas.' : 'Base disponible · aún no hay inventarios publicados.')
+      : ('Error de configuración · '+String(result.error||'desconocido'));
+    const html='<!doctype html><html><head><meta charset="utf-8"><title>Inventarios 3A · Conexión</title></head><body style="font-family:Arial,sans-serif;margin:50px auto;max-width:650px;color:#183787"><h2>Inventarios 3A · '+(ok?'Servicio activo':'Servicio no disponible')+'</h2><p>'+safeMsg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</p><p>La información de inventario se almacena cifrada. Abre el dashboard de GitHub para consultarla.</p></body></html>';
+    return HtmlService.createHtmlOutput(html).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
+  const message=JSON.stringify({type:'inventarios3a-sheets-read',requestId:requestId,result:result})
+    .replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+  const script='<!doctype html><html><head><meta charset="utf-8"></head><body><script>'
+    +'try{window.top.postMessage('+message+','+JSON.stringify(origin)+');}catch(err){document.body.textContent="No se pudo entregar la respuesta";}'
+    +'<\/script></body></html>';
+  return HtmlService.createHtmlOutput(script).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
+
 function equalsKey_(actual, expected) {
   actual = String(actual || ''); expected = String(expected || '');
   if (!expected || actual.length !== expected.length) return false;
@@ -102,6 +119,6 @@ function doPost(e) {
   try {origin=properties_().origin}catch(err){}
   // Mensaje al iframe; la página también verifica el estado por GET (confirmación independiente).
   const msg=JSON.stringify({type:'inventarios3a-sheets-result',requestId:requestId,result:response}).replace(/</g,'\\u003c');
-  const html='<!doctype html><html><body><script>window.parent.postMessage('+msg+','+JSON.stringify(origin)+');<\/script><p>Respuesta registrada.</p></body></html>';
+  const html='<!doctype html><html><body><script>window.top.postMessage('+msg+','+JSON.stringify(origin)+');<\/script><p>Respuesta registrada.</p></body></html>';
   return HtmlService.createHtmlOutput(html).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
