@@ -137,7 +137,7 @@ async function connect(){
   else{await applyRemote(remote);status("Sincronizado · "+stamp(result.savedAt),"ok")}
   serverRevision=result.revision;
  }else{serverRevision="";status("Conectado · aún no hay datos publicados. Carga un inventario o pulsa «Publicar datos».","warning")}
- connected=true;el("cloudPublish").disabled=role!=="admin";el("cloudDisconnect").disabled=false;
+ connected=true;window.inventoryCloudRole=role;el("cloudPublish").disabled=role!=="admin";el("cloudDisconnect").disabled=false;
  lockViewer(role==="viewer");
  if(el("cloudRemember")&&el("cloudRemember").checked){if(!await rememberKey())status("Conectado. Este navegador no permite recordar la clave de lectura.","warning")}
  try{localStorage.setItem(CONFIG,endpoint)}catch(e){}
@@ -166,7 +166,7 @@ async function publish(manual){
  if(!connected||role!=="admin")return;
  if(syncBusy){pending=true;return}
  syncBusy=true;
- status("Cifrando y guardando inventarios en Google Sheets…","warning");
+ status("Cifrando y guardando inventarios en Google Sheets…","warning");if(typeof window.setSaveStatus==="function")window.setSaveStatus("saving","Publicando en Google Sheets…");
  try{
   var prev=await readLatest();latest(prev);
   if(prev.exists&&prev.revision!==serverRevision)throw Error("Otra versión más reciente está publicada. No se sobrescribió. Recarga los datos y revisa el historial.");
@@ -175,13 +175,14 @@ async function publish(manual){
   if(bytes>5800000)throw Error("Los datos superan 5.8 MB cifrados por actualización. Contacta al administrador para particionar el histórico.");
   var res=await iframePost(pack,pack.revision);
   serverRevision=pack.revision;latest({savedAt:res.savedAt||pack.savedAt,revision:serverRevision,exists:true});
-  status("Guardado en Google Sheets · "+stamp(res.savedAt||pack.savedAt),"ok");
- }catch(e){status("No publicado: "+e.message,"error");if(manual)alert("No se pudo publicar en Sheets: "+e.message+". Los inventarios permanecen en este navegador. Descarga un respaldo JSON.");}
+  status("Guardado en Google Sheets · "+stamp(res.savedAt||pack.savedAt),"ok");if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","En Google Sheets · "+stamp(res.savedAt||pack.savedAt));
+ }catch(e){status("No publicado: "+e.message,"error");if(typeof window.setSaveStatus==="function")window.setSaveStatus("error","Solo guardado local · sincronización fallida");if(manual)alert("No se pudo publicar en Sheets: "+e.message+". Los inventarios permanecen en este navegador. Descarga un respaldo JSON.");}
  finally{syncBusy=false;if(pending){pending=false;setTimeout(()=>publish(false),1000)}}
 }
 window.cloudSyncQueue=function(){if(muted||loadingShared||!connected||role!=="admin")return;clearTimeout(debounce);debounce=setTimeout(()=>publish(false),1600)};
-function disconnect(){clearInterval(interval);clearTimeout(debounce);connected=false;material=null;readSecret="";writerSecret="";role="viewer";serverRevision="";lockViewer(false);el("cloudPublish").disabled=true;el("cloudDisconnect").disabled=true;status("Desconectado · el guardado local continúa funcionando","warning")}
+function disconnect(){clearInterval(interval);clearTimeout(debounce);connected=false;window.inventoryCloudRole="";material=null;readSecret="";writerSecret="";role="viewer";serverRevision="";lockViewer(false);el("cloudPublish").disabled=true;el("cloudDisconnect").disabled=true;status("Desconectado · el guardado local continúa funcionando","warning");if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","Guardado local · sin conexión compartida")}
 async function init(){
+ window.inventoryCloudRole="";
  var wrap=el("cloudTokenWrap");if(wrap)wrap.style.display="none";
  var intro=document.querySelector(".cloudintro");
  if(intro&&!el("cloudLastUpdate")){var b=document.createElement("span");b.id="cloudLastUpdate";b.textContent="Comprobando última actualización…";b.style.cssText="display:block;width:100%;font-weight:700;font-size:11px;color:#1f3fb6";intro.appendChild(b)}
