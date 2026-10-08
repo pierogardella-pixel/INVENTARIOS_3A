@@ -75,7 +75,23 @@ body{background:var(--bg)!important}
 #view-data .data-notes p{margin:0;line-height:1.7}
 @media(max-width:700px){#view-data .data-notes{grid-template-columns:1fr}#view-data .data-panel{padding:16px}#view-data .cloudcontrols .btn{flex:1 1 auto}}
 </style>
-</head>
+<style id="sheets-sync-theme">
+.shared-stamp{display:inline-block;background:#eff4ff;color:#1f3fb6;padding:7px 10px;border-radius:8px;font-size:10px;font-weight:750;white-space:nowrap}
+#view-data .cloudintro span#cloudLastUpdate{font-size:12px;flex-basis:100%;color:#2049a5}
+#view-data .cloudcontrols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+#view-data .cloudcontrols .sheets-field{display:flex;flex-direction:column;min-width:0;gap:5px}
+#view-data .cloudcontrols .sheets-field label{margin:0}
+#view-data .cloudcontrols .sheets-field input,#view-data .cloudcontrols .sheets-field select{width:100%;min-width:0;max-width:initial}
+#view-data .cloudcontrols .sheets-wide{grid-column:1/-1}
+#view-data #cloudWriteWrap[hidden],#view-data #cloudRememberWrap[hidden]{display:none}
+#view-data #cloudRememberWrap{font-size:11px;font-weight:600;display:flex;align-items:center;gap:9px;margin:7px 0}
+#view-data #cloudRememberWrap input{width:16px;height:16px;min-width:16px;flex:0 0 16px}
+#view-data .sheets-buttons{display:flex;align-items:center;flex-wrap:wrap;gap:9px}
+#view-data .sheets-buttons .btn{min-height:40px}
+#view-data .cloudhint{margin-top:1px}
+@media(max-width:800px){#view-data .cloudcontrols{grid-template-columns:1fr}.shared-stamp{white-space:normal}}
+@media print{#view-data{display:none!important}.shared-stamp{display:none!important}}
+</style></head>
 <body><div class="layout"><aside class="sidebar">
 <div class="brand"><div class="mark">▦</div><div><strong>Inventarios</strong><small>Centro de control</small></div></div>
 <div class="nav-label">Panel de gestión</div>
@@ -88,7 +104,7 @@ body{background:var(--bg)!important}
 <button class="nav" data-view="method"><span>ⓘ</span><span class="label">Metodología</span></button>
 <button class="nav" data-view="data"><span>☁</span><span class="label">DATOS</span></button>
 <div class="side-end">GUARDADO AUTOMÁTICO<br><b>Inventarios, rondas e investigaciones</b><br>Conserva respaldos JSON para cambiar de equipo</div></aside>
-<main class="main"><header class="topbar"><div class="top-left"><div><span class="eyebrow">Gestión diaria · inventarios</span><strong>Torre de control <span class="hide-mobile">/ Pasillos 01 al 08</span></strong></div></div><div class="top-actions"><select id="cycleSelector" style="width:220px" aria-label="Seleccionar ciclo"></select><button class="btn" id="renameCycleBtn" title="Editar nombre de la ronda seleccionada">✎ Renombrar ronda</button><button class="btn hide-mobile" id="newCycleBtn">+ Nuevo ciclo</button><button class="btn hide-mobile" id="backupBtn">↓ Respaldo</button><span id="saveStatus" class="save-status" role="status" aria-live="polite">● Cargando datos…</span><button class="btn primary" id="uploadBtn">＋ Cargar inventario</button></div></header>
+<main class="main"><header class="topbar"><div class="top-left"><div><span class="eyebrow">Gestión diaria · inventarios</span><strong>Torre de control <span class="hide-mobile">/ Pasillos 01 al 08</span></strong></div></div><div class="top-actions"><select id="cycleSelector" style="width:220px" aria-label="Seleccionar ciclo"></select><button class="btn" id="renameCycleBtn" title="Editar nombre de la ronda seleccionada">✎ Renombrar ronda</button><button class="btn hide-mobile" id="newCycleBtn">+ Nuevo ciclo</button><button class="btn hide-mobile" id="backupBtn">↓ Respaldo</button><span id="saveStatus" class="save-status" role="status" aria-live="polite">● Cargando datos…</span><span id="sharedUpdatedAt" class="shared-stamp" title="Última actualización de datos compartidos">Sin sincronización compartida</span><button class="btn primary" id="uploadBtn">＋ Cargar inventario</button></div></header>
 
 <div class="content">
 <section class="view active" id="view-overview"><div class="title-row"><div><span class="tag blue">Control global</span><h1 style="margin-top:10px">Resumen de inventarios</h1><p class="subtitle" id="overviewSubtitle"></p></div><div class="chips"><button class="btn" id="exportSummary">↓ Resumen CSV</button><button class="btn" id="printReport">▣ Imprimir reporte</button></div></div><div class="hero" id="cycleHero"></div><div class="metrics" id="cycleMetrics"></div><div class="panel" style="margin-bottom:16px"><div class="panel-head"><div><h2>Avance por pasillo</h2><p>Selecciona un pasillo para ver todas sus sesiones y su evolución.</p></div><span class="tag" id="aisleProgressTag"></span></div><div class="aisle-grid" id="aisleGrid"></div></div><div class="grid2"><div class="panel"><div class="panel-head"><div><h2>Registro cronológico del ciclo</h2><p>Todos los días cargados permanecen en el historial, incluso si repites un pasillo.</p></div><button class="text-btn" data-view="calendar">Ver historial →</button></div><div class="table-wrap full"><table><thead><tr><th>Fecha</th><th>Pasillo</th><th>Sesión</th><th>ERI</th><th>ERU</th><th>Estado</th></tr></thead><tbody id="overviewHistory"></tbody></table></div></div><div class="panel"><div class="panel-head"><div><h2>Resumen de hallazgos</h2><p>Sobre la última sesión de cada pasillo del ciclo.</p></div></div><div id="insights"></div></div></div></section>
@@ -101,14 +117,21 @@ body{background:var(--bg)!important}
  <div class="title-row"><div><span class="tag blue">Configuración</span><h1 style="margin-top:10px">Datos y sincronización</h1><p class="subtitle">Conecta los inventarios compartidos con GitHub y consulta el estado de la última actualización.</p></div></div>
  <div class="panel data-panel">
  <div class="cloudbar" id="cloudbar">
-  <div class="cloudintro"><strong>☁ Sincronización GitHub</strong><span id="cloudStatus" data-kind="warning">Modo local · conecta para compartir con jefatura</span></div>
-  <div class="cloudcontrols"><select id="cloudRole" aria-label="Tipo de acceso"><option value="admin">Administrador · carga de datos</option><option value="viewer">Jefatura · solo consulta</option></select><input id="cloudKey" type="password" placeholder="Clave compartida (mín. 16 caracteres)" autocomplete="off" aria-label="Clave de cifrado compartida"><div id="cloudTokenWrap"><input id="cloudToken" type="password" placeholder="Token GitHub para guardar" autocomplete="off" aria-label="Token GitHub, solo administrador"></div><button id="cloudConnect" class="btn primary">Conectar</button><button id="cloudPublish" class="btn" disabled>Publicar ahora</button><button id="cloudDisconnect" class="btn" disabled>Desconectar</button></div>
-  <div class="cloudhint">Los datos se guardan cifrados en GitHub; no publiques tu token ni la clave. La jefatura solo necesita la clave y seleccionar «Solo consulta». Los cambios aparecen automáticamente tras la sincronización.</div>
+  <div class="cloudintro"><strong>☁ Base de datos · Google Sheets</strong><span id="cloudStatus" data-kind="warning">Pendiente de configurar Google Apps Script</span><span id="cloudLastUpdate">Consultando última actualización…</span></div>
+  <div class="cloudcontrols">
+    <div class="sheets-field sheets-wide"><label for="sheetApiUrl">Enlace de Google Apps Script</label><input id="sheetApiUrl" type="url" spellcheck="false" placeholder="https://script.google.com/macros/s/.../exec" aria-label="URL del servicio Google Apps Script"></div>
+    <div class="sheets-field"><label for="cloudRole">Tipo de acceso</label><select id="cloudRole" aria-label="Tipo de acceso"><option value="viewer">Jefatura · consulta</option><option value="admin">Administrador · carga de datos</option></select></div>
+    <div class="sheets-field"><label for="cloudKey">Clave de lectura cifrada</label><input id="cloudKey" type="password" placeholder="Clave compartida (16+ caracteres)" autocomplete="off" aria-label="Clave para descifrar los inventarios"></div>
+    <div class="sheets-field" id="cloudWriteWrap" hidden><label for="cloudWriteKey">Clave de administrador</label><input id="cloudWriteKey" type="password" placeholder="Contraseña de escritura de Apps Script" autocomplete="off" aria-label="Clave de escritura para el administrador"></div>
+    <label id="cloudRememberWrap" class="cloud-remember"><input type="checkbox" id="cloudRemember" checked> Recordar lectura en esta computadora</label>
+  </div>
+  <div class="sheets-buttons"><button id="cloudConnect" class="btn primary">Conectar Google Sheets</button><button id="cloudPublish" class="btn" disabled>Publicar datos</button><button id="cloudDisconnect" class="btn" disabled>Desconectar</button><a class="btn" href="https://docs.google.com/spreadsheets/d/1XhRYp1LJJdieQqS-TaZ-m3CD4dB9O_d54IfsdnZc7V0/edit" target="_blank" rel="noopener">Abrir base Google Sheets ↗</a></div>
+  <div class="cloudhint">El dashboard sigue en GitHub Pages. Google Sheets guarda versiones cifradas del inventario y del histórico; no necesitas un token de GitHub. Para que se actualice en otras computadoras, el administrador debe configurar Apps Script una sola vez y conectar la carga autorizada.</div>
 </div>
  </div>
  <div class="data-notes">
    <div class="panel"><h3><span style="color:#ff7a00">●</span> Guardado local</h3><p>Los inventarios, rondas e investigaciones se guardan en este navegador. Haz un respaldo JSON periódicamente.</p></div>
-   <div class="panel"><h3><span style="color:#1f3fb6">●</span> Datos compartidos</h3><p>Para que jefatura vea la última carga, los datos deben aparecer como publicados en GitHub. Conecta la cuenta autorizada desde esta sección.</p></div>
+   <div class="panel"><h3><span style="color:#1f3fb6">●</span> Datos compartidos</h3><p>Cuando se configure Google Apps Script, el dashboard consultará la última versión cifrada y actualizará automáticamente los datos de jefatura cada 25 segundos.</p></div>
  </div>
 </section>
 </div></main></div>
@@ -275,5 +298,5 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 </script>
 
-<script src="./sync.js"></script>
+<script src="./sheets-sync.js"></script>
 </body></html>
