@@ -10,7 +10,25 @@ Dashboard de control de inventarios para 8 pasillos, rondas editables, ERI, ERU,
 
 > La web ya tiene la dirección del nuevo Apps Script preconfigurada. **La sincronización solo se confirma al conectar, publicar una carga de prueba y ver «Guardado en Google Sheets»**. La página no puede escribir directamente en una hoja privada sin un servicio autorizado. No se necesita token de GitHub.
 
-## Paso 1. Crear el servicio de Google Apps Script
+## CORRECCIÓN DE SINCRONIZACIÓN — octubre de 2026
+
+Se identificó un problema de lectura desde otras computadoras. El backend anterior devolvía el inventario cifrado con `ContentService`/JSONP, que en ciertos accesos puede fallar en la redirección a `script.googleusercontent.com`.
+
+La versión actual cambia la **lectura** a `HtmlService` + `postMessage` con origen limitado a GitHub Pages. Sigue devolviendo únicamente datos cifrados; las claves nunca se transmiten por la lectura. Se mantiene JSONP en el navegador solo como respaldo temporal de compatibilidad.
+
+**Para activar esta corrección en tu servicio existente:**
+1. Abre la nueva [hoja de Google Sheets](https://docs.google.com/spreadsheets/d/16pbpTW88QazyegjnTfVUeFKZyK1N_wCJexV_9tyPMTw/edit), luego **Extensiones → Apps Script**.
+2. En `Código.gs`, reemplaza el código por la **versión actual completa de** [backend/Code.gs](backend/Code.gs) y guarda. No borres tus propiedades `ADMIN_WRITE_KEY` y `ORIGIN`.
+3. En **Implementar → Gestionar implementaciones**, edita la aplicación web activa y elige **Nueva versión**. Mantén **Ejecutar como yo** y **Acceso: Cualquiera**.
+4. Abre la URL `/exec` sin parámetros; debe mostrar **«Inventarios 3A · Servicio activo»**. Ya no debe mostrar un callback `uca3aCallback_`.
+5. Actualiza la web en GitHub Pages con **Ctrl + F5**. En **DATOS**, conecta primero el administrador, comprueba que aparece `En Google Sheets` al publicar una carga de prueba y después conecta el navegador de jefatura con la clave de lectura.
+6. El histórico se conserva en Google Sheets. No elimines filas de `VERSIONES_CIFRADAS` ni borres respaldos locales.
+
+**Indicadores:** `Guardado local` indica que el navegador tiene la información; `En Google Sheets` confirma que la publicación compartida finalizó. Si dice `Solo guardado local · sincronización fallida`, otros equipos aún no reciben esa carga.
+
+---
+
+## Referencia: instalar el servicio de Google Apps Script desde cero (si aún no existe)
 
 1. Abre la hoja de Google Sheets de arriba.
 2. En el menú **Extensiones → Apps Script** crea un proyecto vinculado a esa hoja.
