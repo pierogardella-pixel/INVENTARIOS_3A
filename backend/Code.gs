@@ -60,6 +60,13 @@ function doGet(e) {
   let result;
   try {result=latest_()}catch(err){result={ok:false,error:String(err && err.message || err)}}
   const origin=properties_().origin;
+  // Respaldo compatible con JSONP. Es lectura únicamente y el contenido sigue cifrado.
+  // Útil cuando el iframe de HtmlService no puede enviar postMessage al dashboard.
+  const cb=String(p.callback||'');
+  if (/^uca3aCallback_[A-Za-z0-9_]{6,80}$/.test(cb)) {
+    return ContentService.createTextOutput(cb+'('+JSON.stringify(result)+');')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
   if (!isBridge) {
     const ok=!!(result && result.ok);
     const safeMsg=ok
