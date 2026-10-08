@@ -4,17 +4,18 @@
  * Los inventarios se almacenan CIFRADOS. Nunca se envía la clave de lectura a este servicio.
  *
  * Configuración en Apps Script -> Configuración del proyecto -> Propiedades de secuencia de comandos:
- * SPREADSHEET_ID = ID de tu Google Sheet
+ * SPREADSHEET_ID = ID de tu Google Sheet (opcional: hoja preconfigurada por defecto)
  * ADMIN_WRITE_KEY = contraseña larga y aleatoria de administrador (distinta de la clave de lectura)
  * ORIGIN = https://pierogardella-pixel.github.io
  */
 const HISTORIAL_SHEET = 'VERSIONES_CIFRADAS';
+const DEFAULT_SPREADSHEET_ID = '1XhRYp1LJJdieQqS-TaZ-m3CD4dB9O_d54IfsdnZc7V0';
 const CHUNK_SIZE = 30000;
 const MAX_PAYLOAD_SIZE = 6000000;
 
 function properties_() {
   const p = PropertiesService.getScriptProperties();
-  const sheetId = p.getProperty('SPREADSHEET_ID');
+  const sheetId = p.getProperty('SPREADSHEET_ID') || DEFAULT_SPREADSHEET_ID;
   if (!sheetId) throw Error('Falta SPREADSHEET_ID en Propiedades del proyecto');
   return { sheetId: sheetId, writeKey: p.getProperty('ADMIN_WRITE_KEY') || '', origin: p.getProperty('ORIGIN') || 'https://pierogardella-pixel.github.io' };
 }
