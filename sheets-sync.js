@@ -7,7 +7,31 @@ var endpoint="",readSecret="",writerSecret="",material=null,role="viewer",connec
 const el=id=>document.getElementById(id);
 function status(t,kind){var x=el("cloudStatus");if(x){x.textContent=t;x.dataset.kind=kind||"warning"}}
 function stamp(s){var d=new Date(s);return !s||!Number.isFinite(d.valueOf())?"Sin datos publicados":d.toLocaleString("es-PE",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})}
-function latest(meta){lastKnown=meta;var t=meta&&meta.savedAt?"Última actualización compartida: "+stamp(meta.savedAt):"Aún no hay inventarios publicados";for(var id of ["cloudLastUpdate","sharedUpdatedAt"]){var x=el(id);if(x){x.textContent=t;x.title=t}}}
+function sharedStatus(text,kind,full){
+ var x=el("sharedUpdatedAt");if(!x)return;
+ x.textContent=text;
+ x.dataset.syncState=kind||"pending";
+ x.title=full||text;
+}
+function latest(meta){
+ lastKnown=meta;
+ var full=meta&&meta.savedAt?"Última actualización publicada: "+stamp(meta.savedAt):"Sin inventarios publicados";
+ var x=el("cloudLastUpdate");if(x){x.textContent=full;x.title=full}
+ if(meta&&meta.savedAt){
+  sharedStatus(
+    (connected?"☁ Sincronizado · ":"☁ Datos publicados · ")+stamp(meta.savedAt),
+    connected?"ok":"available",
+    connected?full+" · conexión activa":full+" · conecta en DATOS para leer inventarios"
+  );
+ }else{
+  sharedStatus(connected?"☁ Conectado · sin cargas":"☁ Sin cargas publicadas",connected?"ok":"empty",full);
+ }
+}
+function syncError(e){
+ var msg=e&&e.message||String(e||"No se pudo consultar el servicio");
+ sharedStatus("⚠ Error en nube · DATOS","error","No se pudo consultar Google Sheets: "+msg);
+ return msg;
+}
 function utf(s){return new TextEncoder().encode(s)}
 function b64(b){var a="";for(var i=0;i<b.length;i+=8192)a+=String.fromCharCode.apply(null,b.subarray(i,i+8192));return btoa(a)}
 function unb64(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
@@ -137,7 +161,7 @@ async function connect(){
   else{await applyRemote(remote);status("Sincronizado · "+stamp(result.savedAt),"ok")}
   serverRevision=result.revision;
  }else{serverRevision="";status("Conectado · aún no hay datos publicados. Carga un inventario o pulsa «Publicar datos».","warning")}
- connected=true;window.inventoryCloudRole=role;el("cloudPublish").disabled=role!=="admin";el("cloudDisconnect").disabled=false;
+ connected=true;window.inventoryCloudRole=role;latest(result);el("cloudPublish").disabled=role!=="admin";el("cloudDisconnect").disabled=false;
  lockViewer(role==="viewer");
  if(el("cloudRemember")&&el("cloudRemember").checked){if(!await rememberKey())status("Conectado. Este navegador no permite recordar la clave de lectura.","warning")}
  try{localStorage.setItem(CONFIG,endpoint)}catch(e){}
@@ -175,14 +199,15 @@ async function publish(manual){
   if(bytes>5800000)throw Error("Los datos superan 5.8 MB cifrados por actualización. Contacta al administrador para particionar el histórico.");
   var res=await iframePost(pack,pack.revision);
   serverRevision=pack.revision;latest({savedAt:res.savedAt||pack.savedAt,revision:serverRevision,exists:true});
-  status("Guardado en Google Sheets · "+stamp(res.savedAt||pack.savedAt),"ok");if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","En Google Sheets · "+stamp(res.savedAt||pack.savedAt));
- }catch(e){status("No publicado: "+e.message,"error");if(typeof window.setSaveStatus==="function")window.setSaveStatus("error","Solo guardado local · sincronización fallida");if(manual)alert("No se pudo publicar en Sheets: "+e.message+". Los inventarios permanecen en este navegador. Descarga un respaldo JSON.");}
+  status("Guardado en Google Sheets · "+stamp(res.savedAt||pack.savedAt),"ok");latest({exists:true,revision:pack.revision,savedAt:res.savedAt||pack.savedAt});if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","En Google Sheets · "+stamp(res.savedAt||pack.savedAt));
+ }catch(e){status("No publicado: "+e.message,"error");sharedStatus("⚠ Sin publicar · DATOS","error","Google Sheets no recibió esta carga: "+e.message);if(typeof window.setSaveStatus==="function")window.setSaveStatus("error","Solo guardado local · sincronización fallida");if(manual)alert("No se pudo publicar en Sheets: "+e.message+". Los inventarios permanecen en este navegador. Descarga un respaldo JSON.");}
  finally{syncBusy=false;if(pending){pending=false;setTimeout(()=>publish(false),1000)}}
 }
 window.cloudSyncQueue=function(){if(muted||loadingShared||!connected||role!=="admin")return;clearTimeout(debounce);debounce=setTimeout(()=>publish(false),1600)};
-function disconnect(){clearInterval(interval);clearTimeout(debounce);connected=false;window.inventoryCloudRole="";material=null;readSecret="";writerSecret="";role="viewer";serverRevision="";lockViewer(false);el("cloudPublish").disabled=true;el("cloudDisconnect").disabled=true;status("Desconectado · el guardado local continúa funcionando","warning");if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","Guardado local · sin conexión compartida")}
+function disconnect(){clearInterval(interval);clearTimeout(debounce);connected=false;window.inventoryCloudRole="";material=null;readSecret="";writerSecret="";role="viewer";serverRevision="";lockViewer(false);el("cloudPublish").disabled=true;el("cloudDisconnect").disabled=true;latest(lastKnown);status("Desconectado · el guardado local continúa funcionando","warning");if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","Guardado local · sin conexión compartida")}
 async function init(){
  window.inventoryCloudRole="";
+ sharedStatus("☁ Consultando nube…","pending","Verificando la última versión disponible en Google Sheets");
  var wrap=el("cloudTokenWrap");if(wrap)wrap.style.display="none";
  var intro=document.querySelector(".cloudintro");
  if(intro&&!el("cloudLastUpdate")){var b=document.createElement("span");b.id="cloudLastUpdate";b.textContent="Comprobando última actualización…";b.style.cssText="display:block;width:100%;font-weight:700;font-size:11px;color:#1f3fb6";intro.appendChild(b)}
@@ -192,19 +217,19 @@ async function init(){
  try{if(saved!==DEFAULT_ENDPOINT)localStorage.setItem(CONFIG,DEFAULT_ENDPOINT)}catch(e){}
  el("cloudRole").onchange=function(){var admin=el("cloudRole").value==="admin";el("cloudWriteWrap").hidden=!admin;el("cloudRememberWrap").hidden=admin};
  el("cloudRole").dispatchEvent(new Event("change"));
- el("cloudConnect").onclick=function(){connect().catch(e=>{connected=false;writerSecret="";status("Error: "+e.message,"error")})};
+ el("cloudConnect").onclick=function(){connect().catch(e=>{connected=false;writerSecret="";status("Error: "+e.message,"error");syncError(e)})};
  el("cloudPublish").onclick=function(){publish(true)};
  el("cloudDisconnect").onclick=disconnect;
  document.addEventListener("click",function(e){if(!connected||role!=="viewer")return;if(e.target.closest("[data-delete],[data-action-key],[data-start-upload]")){e.preventDefault();e.stopImmediatePropagation();alert("Modo consulta: no puedes modificar inventarios compartidos")}},true);
  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&connected)checkRemote(false).catch(()=>{})});
- if(!x.value){status("Sin URL configurada · revisa la conexión de Google Sheets","warning");latest(null);return}
+ if(!x.value){status("Sin URL configurada · revisa la conexión de Google Sheets","warning");sharedStatus("⚠ Nube sin configurar","error");return}
  endpoint=x.value;
  try{var data=await readLatest();latest(data);status(data.exists?"Hay datos en Google Sheets · conecta para consultarlos":"Google Sheets conectado · sin inventarios publicados","warning")}
- catch(e){status("No se pudo consultar Google Sheets: "+e.message,"error")}
+ catch(e){status("No se pudo consultar Google Sheets: "+syncError(e),"error")}
  try{
   var key=await recallKey();
   if(key){material=key;el("cloudRole").value="viewer";el("cloudRole").dispatchEvent(new Event("change"));el("cloudRemember").checked=true;loadingShared=true;await Promise.resolve(window.inventoryReady);loadingShared=false;await connect()}
- }catch(e){loadingShared=false;status("Introduce tu clave de lectura en DATOS: "+e.message,"warning")}
+ }catch(e){loadingShared=false;status("Introduce tu clave de lectura en DATOS: "+e.message,"warning");if(!lastKnown)syncError(e)}
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
