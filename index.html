@@ -117,9 +117,9 @@ body{background:var(--bg)!important}
  <div class="title-row"><div><span class="tag blue">Configuración</span><h1 style="margin-top:10px">Datos y sincronización</h1><p class="subtitle">Conecta los inventarios compartidos con GitHub y consulta el estado de la última actualización.</p></div></div>
  <div class="panel data-panel">
  <div class="cloudbar" id="cloudbar">
-  <div class="cloudintro"><strong>☁ Base de datos · Google Sheets</strong><span id="cloudStatus" data-kind="warning">Pendiente de configurar Google Apps Script</span><span id="cloudLastUpdate">Consultando última actualización…</span></div>
+  <div class="cloudintro"><strong>☁ Base de datos · Google Sheets</strong><span id="cloudStatus" data-kind="warning">Comprobando Google Sheets…</span><span id="cloudLastUpdate">Consultando última actualización…</span></div>
   <div class="cloudcontrols">
-    <div class="sheets-field sheets-wide"><label for="sheetApiUrl">Enlace de Google Apps Script</label><input id="sheetApiUrl" type="url" spellcheck="false" placeholder="https://script.google.com/macros/s/.../exec" aria-label="URL del servicio Google Apps Script"></div>
+    <div class="sheets-field sheets-wide"><label for="sheetApiUrl">Enlace de Google Apps Script</label><input id="sheetApiUrl" type="url" spellcheck="false" value="https://script.google.com/macros/s/AKfycbwJYbQdylE2gIFwlxKMJlwJjl5lAXG_7qe5Ux0u5M64cPjfCUMmkzhGo3TctG0IFHlS/exec" placeholder="https://script.google.com/macros/s/.../exec" aria-label="URL del servicio Google Apps Script"></div>
     <div class="sheets-field"><label for="cloudRole">Tipo de acceso</label><select id="cloudRole" aria-label="Tipo de acceso"><option value="viewer">Jefatura · consulta</option><option value="admin">Administrador · carga de datos</option></select></div>
     <div class="sheets-field"><label for="cloudKey">Clave de lectura cifrada</label><input id="cloudKey" type="password" placeholder="Clave compartida (16+ caracteres)" autocomplete="off" aria-label="Clave para descifrar los inventarios"></div>
     <div class="sheets-field" id="cloudWriteWrap" hidden><label for="cloudWriteKey">Clave de administrador</label><input id="cloudWriteKey" type="password" placeholder="Contraseña de escritura de Apps Script" autocomplete="off" aria-label="Clave de escritura para el administrador"></div>
