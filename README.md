@@ -4,11 +4,11 @@ Dashboard de control de inventarios para 8 pasillos, rondas editables, ERI, ERU,
 
 **Página:** https://pierogardella-pixel.github.io/INVENTARIOS_3A/
 
-**URL de Apps Script:** pendiente de crear desde la nueva hoja.
+**URL de Apps Script configurada:** https://script.google.com/macros/s/AKfycbyBDIc-ySOlZnTS-0GNxxM4WhVa3tM5xWTDA9NDsPUn-aBgFK3s4gZczE4LXqzt2tKB/exec
 
 **Base de Google Sheets (creada):** https://docs.google.com/spreadsheets/d/16pbpTW88QazyegjnTfVUeFKZyK1N_wCJexV_9tyPMTw/edit
 
-> La web está publicada y la URL de Apps Script ya está preconfigurada; **la sincronización no se completará hasta autorizar el servicio y publicar el primer inventario cifrado**. La página no puede escribir directamente en una hoja privada sin un servicio autorizado. No se necesita token de GitHub.
+> La web ya tiene la dirección del nuevo Apps Script preconfigurada. **La sincronización solo se confirma al conectar, publicar una carga de prueba y ver «Guardado en Google Sheets»**. La página no puede escribir directamente en una hoja privada sin un servicio autorizado. No se necesita token de GitHub.
 
 ## Paso 1. Crear el servicio de Google Apps Script
 
