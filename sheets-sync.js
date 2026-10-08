@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 var CONFIG="inventarios3a_sheets_url_v1",KEY_DB="inventarios3a_viewer_keys_v1",FRAME_ORIGINS=["https://script.google.com","https://script.googleusercontent.com"];
-var DEFAULT_ENDPOINT="https://script.google.com/macros/s/AKfycbwJYbQdylE2gIFwlxKMJlwJjl5lAXG_7qe5Ux0u5M64cPjfCUMmkzhGo3TctG0IFHlS/exec";
+var DEFAULT_ENDPOINT="";
 var endpoint="",readSecret="",writerSecret="",material=null,role="viewer",connected=false,serverRevision="",syncBusy=false,pending=false,loadingShared=false,muted=false,interval=null,debounce=null,lastKnown=null,verifyTimer=null;
 const el=id=>document.getElementById(id);
 function status(t,kind){var x=el("cloudStatus");if(x){x.textContent=t;x.dataset.kind=kind||"warning"}}
@@ -138,7 +138,7 @@ async function init(){
  if(intro&&!el("cloudLastUpdate")){var b=document.createElement("span");b.id="cloudLastUpdate";b.textContent="Comprobando última actualización…";b.style.cssText="display:block;width:100%;font-weight:700;font-size:11px;color:#1f3fb6";intro.appendChild(b)}
  var x=el("sheetApiUrl"),saved="";
  try{saved=localStorage.getItem(CONFIG)||""}catch(e){}
- x.value=(saved&&urlOk(saved))?saved:DEFAULT_ENDPOINT;
+ x.value="";
  el("cloudRole").onchange=function(){var admin=el("cloudRole").value==="admin";el("cloudWriteWrap").hidden=!admin;el("cloudRememberWrap").hidden=admin};
  el("cloudRole").dispatchEvent(new Event("change"));
  el("cloudConnect").onclick=function(){connect().catch(e=>{connected=false;writerSecret="";status("Error: "+e.message,"error")})};
@@ -146,7 +146,7 @@ async function init(){
  el("cloudDisconnect").onclick=disconnect;
  document.addEventListener("click",function(e){if(!connected||role!=="viewer")return;if(e.target.closest("[data-delete],[data-action-key],[data-start-upload]")){e.preventDefault();e.stopImmediatePropagation();alert("Modo consulta: no puedes modificar inventarios compartidos")}},true);
  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&connected)checkRemote(false).catch(()=>{})});
- if(!x.value){status("Pendiente: configura la URL de Google Apps Script en DATOS","warning");latest(null);return}
+ if(!x.value){status("Nueva base preparada · falta instalar y publicar Apps Script desde la hoja nueva","warning");latest(null);return}
  endpoint=x.value;
  try{var data=await jsonp();latest(data);status(data.exists?"Hay datos en Google Sheets · conecta para consultarlos":"Google Sheets conectado · sin inventarios publicados","warning")}
  catch(e){status("No se pudo consultar Google Sheets: "+e.message,"error")}
