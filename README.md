@@ -4,7 +4,7 @@ Dashboard de control de inventarios para 8 pasillos, rondas editables, ERI, ERU,
 
 **Página:** https://pierogardella-pixel.github.io/INVENTARIOS_3A/
 
-**URL de Apps Script configurada:** https://script.google.com/macros/s/AKfycbyBDIc-ySOlZnTS-0GNxxM4WhVa3tM5xWTDA9NDsPUn-aBgFK3s4gZczE4LXqzt2tKB/exec
+**URL de Apps Script configurada:** https://script.google.com/macros/s/AKfycbwYGP9wz_9sjrWNiWK4PX5X1SZGAtrC0wnxN-_5LbmaudbxufAJspNmIeS52DwH69iJ/exec
 
 **Base de Google Sheets (creada):** https://docs.google.com/spreadsheets/d/16pbpTW88QazyegjnTfVUeFKZyK1N_wCJexV_9tyPMTw/edit
 
