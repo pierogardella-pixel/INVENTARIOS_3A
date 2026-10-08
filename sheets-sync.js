@@ -156,12 +156,18 @@ async function connect(){
  var result=await readLatest();latest(result);
  if(result.exists){
   var remote=await decryptState(result.pack);
-  var extra=role==="admin"&&state.sessions.length>remote.sessions.length;
+  var extra=role==="admin"&&(
+   state.sessions.length>remote.sessions.length ||
+   state.sessions.some(s=>!remote.sessions.some(r=>r.id===s.id&&r.cycleId===s.cycleId&&r.createdAt===s.createdAt)) ||
+   (state.sessions.length>0 && JSON.stringify(state.actions)!==JSON.stringify(remote.actions))
+  );
   if(extra){status("Conectado, pero hay inventarios locales sin publicar. Conservamos tus datos. Haz respaldo y pulsa «Publicar datos».","warning")}
   else{await applyRemote(remote);status("Sincronizado · "+stamp(result.savedAt),"ok")}
   serverRevision=result.revision;
  }else{serverRevision="";status("Conectado · aún no hay datos publicados. Carga un inventario o pulsa «Publicar datos».","warning")}
- connected=true;window.inventoryCloudRole=role;latest(result);el("cloudPublish").disabled=role!=="admin";el("cloudDisconnect").disabled=false;
+ connected=true;window.inventoryCloudRole=role;latest(result);
+ if(typeof extra!=="undefined"&&extra)sharedStatus("⚠ Datos locales pendientes","pending","Hay inventarios o investigaciones locales no publicados. Haz respaldo y publica desde DATOS.");
+ el("cloudPublish").disabled=role!=="admin";el("cloudDisconnect").disabled=false;
  lockViewer(role==="viewer");
  if(el("cloudRemember")&&el("cloudRemember").checked){if(!await rememberKey())status("Conectado. Este navegador no permite recordar la clave de lectura.","warning")}
  try{localStorage.setItem(CONFIG,endpoint)}catch(e){}
@@ -203,7 +209,11 @@ async function publish(manual){
  }catch(e){status("No publicado: "+e.message,"error");sharedStatus("⚠ Sin publicar · DATOS","error","Google Sheets no recibió esta carga: "+e.message);if(typeof window.setSaveStatus==="function")window.setSaveStatus("error","Solo guardado local · sincronización fallida");if(manual)alert("No se pudo publicar en Sheets: "+e.message+". Los inventarios permanecen en este navegador. Descarga un respaldo JSON.");}
  finally{syncBusy=false;if(pending){pending=false;setTimeout(()=>publish(false),1000)}}
 }
-window.cloudSyncQueue=function(){if(muted||loadingShared||!connected||role!=="admin")return;clearTimeout(debounce);debounce=setTimeout(()=>publish(false),1600)};
+window.cloudSyncQueue=function(){
+ if(muted||loadingShared||!connected||role!=="admin")return;
+ sharedStatus("◌ Pendiente de nube","pending","Cambios guardados localmente: publicando en Google Sheets…");
+ clearTimeout(debounce);debounce=setTimeout(()=>publish(false),1600)
+};
 function disconnect(){clearInterval(interval);clearTimeout(debounce);connected=false;window.inventoryCloudRole="";material=null;readSecret="";writerSecret="";role="viewer";serverRevision="";lockViewer(false);el("cloudPublish").disabled=true;el("cloudDisconnect").disabled=true;latest(lastKnown);status("Desconectado · el guardado local continúa funcionando","warning");if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","Guardado local · sin conexión compartida")}
 async function init(){
  window.inventoryCloudRole="";
