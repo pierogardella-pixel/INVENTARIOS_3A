@@ -24,14 +24,20 @@ async function showCloudPreview(){try{var r=await readRemote(false);showLatest(r
 async function encrypt(data){var salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),key=await getKey(salt);var result=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,new TextEncoder().encode(JSON.stringify(data)));return {format:"inventario-3a-aesgcm-v1",revision:crypto.randomUUID(),savedAt:new Date().toISOString(),salt:toB64(salt),iv:toB64(iv),cipher:toB64(new Uint8Array(result))}}
 async function decrypt(obj){if(!obj||obj.format!=="inventario-3a-aesgcm-v1")throw Error("Formato de archivo no válido");var k=await getKey(fromB64(obj.salt));var bytes;try{bytes=await crypto.subtle.decrypt({name:"AES-GCM",iv:fromB64(obj.iv)},k,fromB64(obj.cipher))}catch(e){throw Error("Clave incorrecta o datos cifrados dañados")}var d=JSON.parse(new TextDecoder().decode(bytes));if(!Array.isArray(d.cycles)||!Array.isArray(d.sessions)||!d.actions||typeof d.actions!=="object")throw Error("Datos compartidos no válidos");return d}
 async function readRemote(apiMode){
+if(!apiMode){
+ var rr=await fetch(raw+"?v="+Date.now(),{cache:"no-store"});
+ if(rr.status===404)return {missing:true};
+ if(!rr.ok)throw Error("GitHub público respondió HTTP "+rr.status);
+ return {pack:await rr.json(),sha:null};
+}
 var url=api+"?v="+Date.now(),headers={Accept:"application/vnd.github+json"};
-if(apiMode&&token)headers.Authorization="Bearer "+token;
+if(token)headers.Authorization="Bearer "+token;
 var r=await fetch(url,{headers:headers,cache:"no-store"});
 if(r.status===404)return {missing:true};
 if(!r.ok)throw Error("GitHub respondió HTTP "+r.status);
 var j=await r.json(),pack;
 if(j.encoding==="base64"&&j.content){pack=JSON.parse(decode(j.content.replace(/\s/g,"")))}
-else {var rr=await fetch(raw+"?v="+Date.now(),{cache:"no-store"});if(!rr.ok)throw Error("No se pudo obtener archivo cifrado");pack=await rr.json()}
+else {var rf=await fetch(raw+"?v="+Date.now(),{cache:"no-store"});if(!rf.ok)throw Error("No se pudo obtener archivo cifrado");pack=await rf.json()}
 return {pack:pack,sha:j.sha}
 }
 function lockViewer(yes){["uploadBtn","newCycleBtn","renameCycleBtn","confirmImport","saveAction","createCycle","saveCycleName"].forEach(id=>{var n=el(id);if(n)n.disabled=yes});document.body.classList.toggle("cloud-readonly",yes)}
