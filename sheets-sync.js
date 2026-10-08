@@ -19,15 +19,28 @@ async function encryptState(obj){var salt=crypto.getRandomValues(new Uint8Array(
 async function decryptState(p){if(!p||p.format!=="inventario-3a-aesgcm-v1")throw Error("Formato cifrado desconocido");var bytes;try{bytes=new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(p.iv)},await derive(unb64(p.salt)),unb64(p.cipher)))}catch(e){throw Error("La clave de lectura es incorrecta o los datos están dañados")}var obj=JSON.parse(new TextDecoder().decode(await unzip(bytes,p.codec||"identity")));if(!Array.isArray(obj.cycles)||!Array.isArray(obj.sessions)||!obj.actions||typeof obj.actions!=="object")throw Error("El inventario compartido no es válido");return obj}
 function urlOk(url){return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec\/?$/.test(url)}
 function scriptURL(){var x=String(el("sheetApiUrl").value||"").trim().replace(/\/$/,"");if(!urlOk(x))throw Error("Introduce la dirección /exec de Google Apps Script");return x}
-function jsonp(){return new Promise((resolve,reject)=>{
+function jsonpOnce(){return new Promise((resolve,reject)=>{
  var cb="uca3aCallback_"+Math.random().toString(36).slice(2)+Date.now().toString(36),script=document.createElement("script"),done=false;
- var t=setTimeout(()=>finish(Error("Google Sheets no respondió. Revisa el despliegue de Apps Script")),26000);
- function finish(err,data){if(done)return;done=true;clearTimeout(t);delete window[cb];script.remove();if(err)reject(err);else if(!data||!data.ok)reject(Error((data&&data.error)||"Error al leer Google Sheets"));else resolve(data)}
+ var t=setTimeout(()=>finish(Error("Tiempo de espera agotado: Apps Script no respondió")),18000);
+ function finish(err,data){if(done)return;done=true;clearTimeout(t);delete window[cb];script.remove();if(err)reject(err);else if(!data||!data.ok)reject(Error((data&&data.error)||"Apps Script respondió con un error"));else resolve(data)}
  window[cb]=data=>finish(null,data);
- script.onerror=()=>finish(Error("No se pudo acceder a Apps Script. Revisa la URL y acceso público del servicio"));
+ script.onerror=()=>finish(Error("La respuesta de Apps Script fue bloqueada o no se pudo cargar"));
+ script.onload=()=>setTimeout(()=>{if(!done)finish(Error("Apps Script no devolvió la respuesta esperada. Verifica que el despliegue incluya doGet(e)"))},500);
+ script.async=true;
  script.src=endpoint+"?callback="+cb+"&t="+Date.now();
  document.head.appendChild(script);
  })}
+async function jsonp(){
+ var last;
+ for(var n=0;n<3;n++){
+  try{return await jsonpOnce()}catch(e){
+   last=e;
+   if(/Clave|cifrado|Formato|permiso de escritura|SPREADSHEET_ID|callback|hoja|sheet/i.test(e.message))throw e;
+   if(n<2)await new Promise(resolve=>setTimeout(resolve,900*(n+1)));
+  }
+ }
+ throw Error(last.message+". Comprueba el botón «Probar Apps Script» y vuelve a implementar la versión actual con acceso «Cualquiera».");
+}
 function openStore(){return new Promise((resolve,reject)=>{var r=indexedDB.open(KEY_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore("settings");r.onerror=()=>reject(r.error);r.onsuccess=()=>resolve(r.result)})}
 async function rememberKey(){try{var k=await masterKey(),db=await openStore();await new Promise((a,b)=>{var tx=db.transaction("settings","readwrite");tx.objectStore("settings").put(k,"viewerKey");tx.oncomplete=a;tx.onerror=()=>b(tx.error)});db.close();return true}catch(e){return false}}
 async function recallKey(){try{var db=await openStore(),v=await new Promise((a,b)=>{var tx=db.transaction("settings","readonly"),r=tx.objectStore("settings").get("viewerKey");r.onsuccess=()=>a(r.result||null);r.onerror=()=>b(r.error)});db.close();return v}catch(e){return null}}
