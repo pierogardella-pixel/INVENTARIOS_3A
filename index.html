@@ -206,7 +206,7 @@ function persist(){
     if(db){try{await new Promise((res,rej)=>{let tx=db.transaction('state','readwrite');tx.objectStore('state').put(data,'data');tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error||new Error('Transacción abortada'))});indexedOk=true}catch(e){reason=String(e?.message||e)}}
     try{localStorage.setItem(STORE_KEY,JSON.stringify(data));localOk=true}catch(e){reason=String(e?.message||e)}
     if(!indexedOk&&!localOk){setSaveStatus('error','No guardado · Descarga respaldo');toast('No se guardaron los cambios. Descarga un respaldo JSON antes de cerrar. '+reason);return false}
-    setSaveStatus('ok','Guardado '+new Date(data._savedAt).toLocaleString('es-PE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
+    setSaveStatus('ok','Guardado local · '+new Date(data._savedAt).toLocaleString('es-PE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
     if(window.cloudSyncQueue)window.cloudSyncQueue();
     return true;
   }).catch(e=>{setSaveStatus('error','Error de guardado · Haz respaldo');toast('Error al guardar: '+String(e));return false});
