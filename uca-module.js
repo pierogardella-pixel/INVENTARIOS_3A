@@ -179,25 +179,30 @@ function extract(grids){
   if(!Array.isArray(grid))continue;
   for(let i=0;i<Math.min(12,grid.length);i++){
    let header=(grid[i]||[]).map(normalize);
-   if(header.some(h=>h==="sku"||h==="codigo sku"||h==="codigo producto")&&header.some(h=>["stock","cantidad","unidades","stock wms","stock disponible","cantidad disponible"].includes(h))){chosen={name,grid,start:i};break}
+   if(header.some(h=>h==="sku"||h==="codigo sku"||h==="codigo producto")&&
+     (header.some(h=>["stock","cantidad","unidades","stock wms","stock disponible","cantidad disponible","stock global"].includes(h))||
+      grid.slice(i+1,i+8).some(row=>row&&row.length>=12&&(qty(row[10])!==null||qty(row[11])!==null)))){chosen={name,grid,start:i};break}
   }if(chosen)break
  }
- if(!chosen)throw Error("El Excel necesita columnas SKU y Stock o Cantidad.");
+ if(!chosen)throw Error("Se requiere una hoja con SKU y existencias numéricas en las columnas K y L (o un campo Stock de referencia).");
  let head=chosen.grid[chosen.start].map(v=>String(v??"")),result=[],discarded=0;
  for(let raw of chosen.grid.slice(chosen.start+1)){
   let obj=Object.fromEntries(head.map((k,i)=>[k,raw?.[i]]));
   let sku=skuValue(get(obj,["SKU","Código SKU","Código producto"]));
-  let val=get(obj,["Stock","Stock disponible","Stock WMS","Cantidad disponible","Cantidad","Unidades"]);
-  if(!sku||val===undefined||val===null||val===""){discarded++;continue}
-  let stock=Number(String(val).replace(",","."));
-  if(!Number.isFinite(stock)||stock<0){discarded++;continue}
-  result.push({sku,stock,product:String(get(obj,["Producto","Nombre producto","Descripción","Descripcion","Nombre"])||""),category:String(get(obj,["Categoría","Categoria","Familia"])||""),
+  let rawK=raw?.[10],rawL=raw?.[11];
+  let stockK=qty(rawK),stockL=qty(rawL);
+  let val=get(obj,["Stock","Stock disponible","Stock WMS","Cantidad disponible","Cantidad","Unidades","Stock global"]);
+  if(!sku){discarded++;continue}
+  if(stockK===null&&stockL===null&&qty(val)===null){discarded++;continue}
+  // La cantidad mostrada es auxiliar; la clasificación usa exclusivamente K y L.
+  let stock=qty(val)??Math.max(stockK??0,stockL??0);
+  result.push({sku,stock,stockK,stockL,product:String(get(obj,["Producto","Nombre producto","Descripción","Descripcion","Nombre"])||""),category:String(get(obj,["Categoría","Categoria","Familia"])||""),
    expiry:dateValue(get(obj,["Vencimiento","Fecha vencimiento","Fecha de vencimiento","Fecha caducidad","Caducidad","F. Vencimiento","FV"])),
    received:dateValue(get(obj,["Fecha ingreso","Fecha de ingreso","Fecha recepción","Ingreso"])),
    aisle:String(get(obj,["Pasillo","Aisle"])||""),location:String(get(obj,["Ubicación","Ubicacion"])||"")});
  }
  if(!result.length)throw Error("No se encontraron filas válidas con SKU y stock.");
- const map=new Map();for(let r of result){let key=[r.sku,r.expiry,r.received,r.aisle,r.location].join("|"),old=map.get(key);if(old)old.stock+=r.stock;else map.set(key,r)}
+ const map=new Map();for(let r of result){let key=[r.sku,r.expiry,r.received,r.aisle,r.location].join("|"),old=map.get(key);if(old){old.stock+=r.stock;old.stockK=old.stockK!==null&&r.stockK!==null?old.stockK+r.stockK:null;old.stockL=old.stockL!==null&&r.stockL!==null?old.stockL+r.stockL:null}else map.set(key,r)}
  return {rows:[...map.values()],discarded};
 }
 async function importFile(file){
