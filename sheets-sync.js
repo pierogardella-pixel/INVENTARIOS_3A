@@ -123,7 +123,7 @@ async function applyRemote(obj){
  muted=true;
  try{
    var before=currentCycle;
-   state={cycles:obj.cycles,sessions:obj.sessions,actions:obj.actions,uca:obj.uca||null,_savedAt:obj._savedAt||new Date().toISOString()};
+   state={cycles:obj.cycles,sessions:obj.sessions,actions:obj.actions,uca:obj.uca||null,tvuRules:obj.tvuRules||null,_savedAt:obj._savedAt||new Date().toISOString()};
    currentCycle=state.cycles.some(x=>x.id===before)?before:(state.cycles[0]&&state.cycles[0].id||"");
    currentAisle="01";selectedSession="";
    await persist();render();
@@ -160,7 +160,8 @@ async function connect(){
    state.sessions.length>remote.sessions.length ||
    state.sessions.some(s=>!remote.sessions.some(r=>r.id===s.id&&r.cycleId===s.cycleId&&r.createdAt===s.createdAt)) ||
    (state.sessions.length>0 && JSON.stringify(state.actions)!==JSON.stringify(remote.actions)) ||
-   (!!state.uca?.rows?.length && (!remote.uca?.rows?.length || String(state.uca.updatedAt||"")>String(remote.uca.updatedAt||"")))
+   (!!state.uca?.rows?.length && (!remote.uca?.rows?.length || String(state.uca.updatedAt||"")>String(remote.uca.updatedAt||""))) ||
+   (!!state.tvuRules?.rows?.length && (!remote.tvuRules?.rows?.length || String(state.tvuRules.updatedAt||"")>String(remote.tvuRules.updatedAt||"")))
   );
   if(extra){status("Conectado, pero hay inventarios UCA/WMS o investigaciones locales sin publicar. Conservamos tus datos. Haz respaldo y pulsa «Publicar datos».","warning")}
   else{await applyRemote(remote);status("Sincronizado · "+stamp(result.savedAt),"ok")}
