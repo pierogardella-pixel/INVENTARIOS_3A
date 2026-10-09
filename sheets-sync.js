@@ -159,9 +159,10 @@ async function connect(){
   var extra=role==="admin"&&(
    state.sessions.length>remote.sessions.length ||
    state.sessions.some(s=>!remote.sessions.some(r=>r.id===s.id&&r.cycleId===s.cycleId&&r.createdAt===s.createdAt)) ||
-   (state.sessions.length>0 && JSON.stringify(state.actions)!==JSON.stringify(remote.actions))
+   (state.sessions.length>0 && JSON.stringify(state.actions)!==JSON.stringify(remote.actions)) ||
+   (!!state.uca?.rows?.length && (!remote.uca?.rows?.length || String(state.uca.updatedAt||"")>String(remote.uca.updatedAt||"")))
   );
-  if(extra){status("Conectado, pero hay inventarios locales sin publicar. Conservamos tus datos. Haz respaldo y pulsa «Publicar datos».","warning")}
+  if(extra){status("Conectado, pero hay inventarios UCA/WMS o investigaciones locales sin publicar. Conservamos tus datos. Haz respaldo y pulsa «Publicar datos».","warning")}
   else{await applyRemote(remote);status("Sincronizado · "+stamp(result.savedAt),"ok")}
   serverRevision=result.revision;
  }else{serverRevision="";status("Conectado · aún no hay datos publicados. Carga un inventario o pulsa «Publicar datos».","warning")}
