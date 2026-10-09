@@ -4,6 +4,7 @@
 var CONFIG="inventarios3a_sheets_url_v1",KEY_DB="inventarios3a_viewer_keys_v1",FRAME_ORIGINS=["https://script.google.com","https://script.googleusercontent.com"];
 var DEFAULT_ENDPOINT="https://script.google.com/macros/s/AKfycbwYGP9wz_9sjrWNiWK4PX5X1SZGAtrC0wnxN-_5LbmaudbxufAJspNmIeS52DwH69iJ/exec";
 var endpoint="",readSecret="",writerSecret="",material=null,role="viewer",connected=false,serverRevision="",syncBusy=false,pending=false,loadingShared=false,muted=false,interval=null,debounce=null,lastKnown=null,verifyTimer=null,preflightTimer=null,preflightBusy=false,manualDisconnected=false;
+var PENDING_KEY="inventarios3a_pending_cloud_upload_v1";
 const el=id=>document.getElementById(id);
 function status(t,kind){var x=el("cloudStatus");if(x){x.textContent=t;x.dataset.kind=kind||"warning"}}
 function stamp(s){var d=new Date(s);return !s||!Number.isFinite(d.valueOf())?"Sin datos publicados":d.toLocaleString("es-PE",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})}
@@ -26,6 +27,18 @@ function latest(meta){
  }else{
   sharedStatus(connected?"☁ Conectado · sin cargas":"☁ Sin cargas publicadas",connected?"ok":"empty",full);
  }
+}
+function pendingFlag(value){
+ try{if(value)localStorage.setItem(PENDING_KEY,"1");else localStorage.removeItem(PENDING_KEY)}catch(e){}
+}
+function hasPendingFlag(){
+ try{return localStorage.getItem(PENDING_KEY)==="1"}catch(e){return false}
+}
+function pendingLabel(){
+ sharedStatus("⚠ Cambios pendientes · DATOS","pending","Tus datos están guardados en esta computadora, pero todavía no se han publicado en Google Sheets. Entra a DATOS como administrador.");
+}
+function showPendingIfNeeded(){
+ if(hasPendingFlag()&&role!=="viewer"&&!connected)pendingLabel();
 }
 function syncError(e){
  var msg=e&&e.message||String(e||"No se pudo consultar el servicio");
@@ -140,7 +153,7 @@ async function checkRemote(force){
  if(role==="admin" && state.sessions.length>decoded.sessions.length && !force){
     status("Hay inventarios locales sin publicar. Haz respaldo y revisa antes de sincronizar.","warning");return
  }
- await applyRemote(decoded);serverRevision=d.revision;
+ await applyRemote(decoded);serverRevision=d.revision;pendingFlag(false);
  status("Actualizado desde Google Sheets · "+stamp(d.savedAt),"ok")
 }
 async function connect(){
@@ -168,7 +181,7 @@ async function connect(){
   else{await applyRemote(remote);status("Sincronizado · "+stamp(result.savedAt),"ok")}
   serverRevision=result.revision;
  }else{serverRevision="";status("Conectado · aún no hay datos publicados. Carga un inventario o pulsa «Publicar datos».","warning")}
- connected=true;manualDisconnected=false;window.inventoryCloudRole=role;latest(result);
+ connected=true;manualDisconnected=false;window.inventoryCloudRole=role;latest(result);if(role==="admin"&&hasPendingFlag())pendingLabel();
  if(typeof extra!=="undefined"&&extra)sharedStatus("⚠ Datos locales pendientes","pending","Hay inventarios o investigaciones locales no publicados. Haz respaldo y publica desde DATOS.");
  el("cloudPublish").disabled=role!=="admin";el("cloudDisconnect").disabled=false;
  lockViewer(role==="viewer");
@@ -207,23 +220,27 @@ async function publish(manual){
   var obj=JSON.parse(JSON.stringify(state)),pack=await encryptState(obj),bytes=JSON.stringify(pack).length;
   if(bytes>5800000)throw Error("Los datos superan 5.8 MB cifrados por actualización. Contacta al administrador para particionar el histórico.");
   var res=await iframePost(pack,pack.revision);
-  serverRevision=pack.revision;latest({savedAt:res.savedAt||pack.savedAt,revision:serverRevision,exists:true});
+  serverRevision=pack.revision;if(!pending)pendingFlag(false);latest({savedAt:res.savedAt||pack.savedAt,revision:serverRevision,exists:true});
   status("Guardado en Google Sheets · "+stamp(res.savedAt||pack.savedAt),"ok");latest({exists:true,revision:pack.revision,savedAt:res.savedAt||pack.savedAt});if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","En Google Sheets · "+stamp(res.savedAt||pack.savedAt));
- }catch(e){status("No publicado: "+e.message,"error");sharedStatus("⚠ Sin publicar · DATOS","error","Google Sheets no recibió esta carga: "+e.message);if(typeof window.setSaveStatus==="function")window.setSaveStatus("error","Solo guardado local · sincronización fallida");if(manual)alert("No se pudo publicar en Sheets: "+e.message+". Los inventarios permanecen en este navegador. Descarga un respaldo JSON.");}
+ }catch(e){pendingFlag(true);status("No publicado: "+e.message,"error");sharedStatus("⚠ Sin publicar · DATOS","error","Google Sheets no recibió esta carga: "+e.message);if(typeof window.setSaveStatus==="function")window.setSaveStatus("error","Solo guardado local · sincronización fallida");if(manual)alert("No se pudo publicar en Sheets: "+e.message+". Los inventarios permanecen en este navegador. Descarga un respaldo JSON.");}
  finally{syncBusy=false;if(pending){pending=false;setTimeout(()=>publish(false),1000)}}
 }
 window.cloudSyncQueue=function(){
- if(muted||loadingShared||!connected||role!=="admin")return;
+ if(muted||loadingShared)return;
+ pendingFlag(true);
+ if(!connected){pendingLabel();status("Los cambios están guardados localmente. Entra a DATOS, conecta como administrador y pulsa «Publicar datos».","warning");return}
+ if(role!=="admin"){pendingLabel();return}
  sharedStatus("◌ Pendiente de nube","pending","Cambios guardados localmente: publicando en Google Sheets…");
  clearTimeout(debounce);debounce=setTimeout(()=>publish(false),1600)
 };
-function disconnect(){clearInterval(interval);clearTimeout(debounce);connected=false;manualDisconnected=true;window.inventoryCloudRole="";material=null;readSecret="";writerSecret="";role="viewer";serverRevision="";lockViewer(false);el("cloudPublish").disabled=true;el("cloudDisconnect").disabled=true;latest(lastKnown);status("Desconectado · el guardado local continúa funcionando","warning");if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","Guardado local · sin conexión compartida")}
+function disconnect(){clearInterval(interval);clearTimeout(debounce);connected=false;manualDisconnected=true;window.inventoryCloudRole="";material=null;readSecret="";writerSecret="";role="viewer";serverRevision="";lockViewer(false);el("cloudPublish").disabled=true;el("cloudDisconnect").disabled=true;latest(lastKnown);status("Desconectado · el guardado local continúa funcionando","warning");if(hasPendingFlag())pendingLabel();if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","Guardado local · sin conexión compartida")}
 async function preflight(){
  if(connected||preflightBusy||!endpoint||document.hidden)return;
  preflightBusy=true;
  try{
   var data=await readLatest();
   latest(data);
+  if(hasPendingFlag())pendingLabel();
   status(data.exists?"Google Sheets disponible · conecta para consultar el inventario":"Google Sheets disponible · sin publicaciones","warning");
   if(!manualDisconnected&&el("cloudRole").value==="viewer"){
    var remembered=await recallKey();
@@ -253,6 +270,15 @@ async function init(){
  el("cloudRole").dispatchEvent(new Event("change"));
  el("cloudConnect").onclick=function(){connect().catch(e=>{connected=false;writerSecret="";status("Error: "+e.message,"error");syncError(e)})};
  el("cloudPublish").onclick=function(){publish(true)};
+ var topSync=el("syncNowBtn");
+ if(topSync)topSync.onclick=async function(){
+  if(!connected){selectedView("data");status("Para publicar y actualizar las demás computadoras, conecta Google Sheets como administrador.","warning");return}
+  if(role==="admin"){await publish(true);return}
+  topSync.disabled=true;
+  try{await checkRemote(false);status("Última versión comprobada · "+(lastKnown?.savedAt?stamp(lastKnown.savedAt):"sin cargas"),"ok")}
+  catch(e){status("No se pudo actualizar: "+syncError(e),"error")}
+  finally{topSync.disabled=false}
+ };
  el("cloudDisconnect").onclick=disconnect;
  document.addEventListener("click",function(e){if(!connected||role!=="viewer")return;if(e.target.closest("[data-delete],[data-action-key],[data-start-upload]")){e.preventDefault();e.stopImmediatePropagation();alert("Modo consulta: no puedes modificar inventarios compartidos")}},true);
  document.addEventListener("visibilitychange",()=>{
