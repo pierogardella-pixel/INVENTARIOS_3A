@@ -298,14 +298,15 @@ function extract(grids){
    received:dateValue(get(obj,["Fecha ingreso","Fecha de ingreso","Ingreso a almacen","Ingreso a almacén","Fecha recepción","Ingreso"])),
    aisle:String(get(obj,["Pasillo","Aisle"])||""),
    location:String(get(obj,["Ubicación","Ubicacion","Posicion"])||""),
-   zone:String(get(obj,["Zona","Tipo ubic.","TIPO"])||"")
+   zone:String(get(obj,["Zona","Zona almacén","Área","Area"])||""),
+   storageType:String(get(obj,["TIPO","Tipo ubicación","Tipo ubic.","Tipo almacenaje"])||"")
   });
  }
  if(!result.length)throw Error("El Excel no contiene productos con cantidades numéricas válidas.");
  // Conservar lotes y ubicaciones; sumar únicamente filas de igual SKU, fecha y posición.
  const rows=new Map();
  for(const r of result){
-  const key=[r.sku,r.expiry,r.received,r.aisle,r.location,r.stockMode].join("|");
+  const key=[r.sku,r.expiry,r.received,r.aisle,r.location,r.stockMode,r.storageType,r.zone].join("|");
   let old=rows.get(key);
   if(old){
    old.stock+=r.stock;
