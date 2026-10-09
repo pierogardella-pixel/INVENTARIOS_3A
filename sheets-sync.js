@@ -123,7 +123,7 @@ async function applyRemote(obj){
  muted=true;
  try{
    var before=currentCycle;
-   state={cycles:obj.cycles,sessions:obj.sessions,actions:obj.actions,_savedAt:obj._savedAt||new Date().toISOString()};
+   state={cycles:obj.cycles,sessions:obj.sessions,actions:obj.actions,uca:obj.uca||null,_savedAt:obj._savedAt||new Date().toISOString()};
    currentCycle=state.cycles.some(x=>x.id===before)?before:(state.cycles[0]&&state.cycles[0].id||"");
    currentAisle="01";selectedSession="";
    await persist();render();
