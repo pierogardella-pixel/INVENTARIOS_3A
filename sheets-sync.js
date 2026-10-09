@@ -3,7 +3,7 @@
 "use strict";
 var CONFIG="inventarios3a_sheets_url_v1",KEY_DB="inventarios3a_viewer_keys_v1",FRAME_ORIGINS=["https://script.google.com","https://script.googleusercontent.com"];
 var DEFAULT_ENDPOINT="https://script.google.com/macros/s/AKfycbwYGP9wz_9sjrWNiWK4PX5X1SZGAtrC0wnxN-_5LbmaudbxufAJspNmIeS52DwH69iJ/exec";
-var endpoint="",readSecret="",writerSecret="",material=null,role="viewer",connected=false,serverRevision="",syncBusy=false,pending=false,loadingShared=false,muted=false,interval=null,debounce=null,lastKnown=null,verifyTimer=null;
+var endpoint="",readSecret="",writerSecret="",material=null,role="viewer",connected=false,serverRevision="",syncBusy=false,pending=false,loadingShared=false,muted=false,interval=null,debounce=null,lastKnown=null,verifyTimer=null,preflightTimer=null,preflightBusy=false,manualDisconnected=false;
 const el=id=>document.getElementById(id);
 function status(t,kind){var x=el("cloudStatus");if(x){x.textContent=t;x.dataset.kind=kind||"warning"}}
 function stamp(s){var d=new Date(s);return !s||!Number.isFinite(d.valueOf())?"Sin datos publicados":d.toLocaleString("es-PE",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})}
@@ -165,7 +165,7 @@ async function connect(){
   else{await applyRemote(remote);status("Sincronizado · "+stamp(result.savedAt),"ok")}
   serverRevision=result.revision;
  }else{serverRevision="";status("Conectado · aún no hay datos publicados. Carga un inventario o pulsa «Publicar datos».","warning")}
- connected=true;window.inventoryCloudRole=role;latest(result);
+ connected=true;manualDisconnected=false;window.inventoryCloudRole=role;latest(result);
  if(typeof extra!=="undefined"&&extra)sharedStatus("⚠ Datos locales pendientes","pending","Hay inventarios o investigaciones locales no publicados. Haz respaldo y publica desde DATOS.");
  el("cloudPublish").disabled=role!=="admin";el("cloudDisconnect").disabled=false;
  lockViewer(role==="viewer");
@@ -214,7 +214,28 @@ window.cloudSyncQueue=function(){
  sharedStatus("◌ Pendiente de nube","pending","Cambios guardados localmente: publicando en Google Sheets…");
  clearTimeout(debounce);debounce=setTimeout(()=>publish(false),1600)
 };
-function disconnect(){clearInterval(interval);clearTimeout(debounce);connected=false;window.inventoryCloudRole="";material=null;readSecret="";writerSecret="";role="viewer";serverRevision="";lockViewer(false);el("cloudPublish").disabled=true;el("cloudDisconnect").disabled=true;latest(lastKnown);status("Desconectado · el guardado local continúa funcionando","warning");if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","Guardado local · sin conexión compartida")}
+function disconnect(){clearInterval(interval);clearTimeout(debounce);connected=false;manualDisconnected=true;window.inventoryCloudRole="";material=null;readSecret="";writerSecret="";role="viewer";serverRevision="";lockViewer(false);el("cloudPublish").disabled=true;el("cloudDisconnect").disabled=true;latest(lastKnown);status("Desconectado · el guardado local continúa funcionando","warning");if(typeof window.setSaveStatus==="function")window.setSaveStatus("ok","Guardado local · sin conexión compartida")}
+async function preflight(){
+ if(connected||preflightBusy||!endpoint||document.hidden)return;
+ preflightBusy=true;
+ try{
+  var data=await readLatest();
+  latest(data);
+  status(data.exists?"Google Sheets disponible · conecta para consultar el inventario":"Google Sheets disponible · sin publicaciones","warning");
+  if(!manualDisconnected&&el("cloudRole").value==="viewer"){
+   var remembered=await recallKey();
+   if(remembered&&!connected){
+    material=remembered;
+    el("cloudRemember").checked=true;
+    loadingShared=true;
+    try{await Promise.resolve(window.inventoryReady)}finally{loadingShared=false}
+    await connect();
+   }
+  }
+ }catch(e){
+  status("No se pudo consultar Google Sheets: "+syncError(e),"error");
+ }finally{preflightBusy=false}
+}
 async function init(){
  window.inventoryCloudRole="";
  sharedStatus("☁ Consultando nube…","pending","Verificando la última versión disponible en Google Sheets");
@@ -231,15 +252,16 @@ async function init(){
  el("cloudPublish").onclick=function(){publish(true)};
  el("cloudDisconnect").onclick=disconnect;
  document.addEventListener("click",function(e){if(!connected||role!=="viewer")return;if(e.target.closest("[data-delete],[data-action-key],[data-start-upload]")){e.preventDefault();e.stopImmediatePropagation();alert("Modo consulta: no puedes modificar inventarios compartidos")}},true);
- document.addEventListener("visibilitychange",()=>{if(!document.hidden&&connected)checkRemote(false).catch(()=>{})});
+ document.addEventListener("visibilitychange",()=>{
+  if(document.hidden)return;
+  if(connected)checkRemote(false).catch(e=>{status("No se pudo actualizar Google Sheets: "+e.message,"error");syncError(e)});
+  else preflight();
+ });
  if(!x.value){status("Sin URL configurada · revisa la conexión de Google Sheets","warning");sharedStatus("⚠ Nube sin configurar","error");return}
  endpoint=x.value;
- try{var data=await readLatest();latest(data);status(data.exists?"Hay datos en Google Sheets · conecta para consultarlos":"Google Sheets conectado · sin inventarios publicados","warning")}
- catch(e){status("No se pudo consultar Google Sheets: "+syncError(e),"error")}
- try{
-  var key=await recallKey();
-  if(key){material=key;el("cloudRole").value="viewer";el("cloudRole").dispatchEvent(new Event("change"));el("cloudRemember").checked=true;loadingShared=true;await Promise.resolve(window.inventoryReady);loadingShared=false;await connect()}
- }catch(e){loadingShared=false;status("Introduce tu clave de lectura en DATOS: "+e.message,"warning");if(!lastKnown)syncError(e)}
+ clearInterval(preflightTimer);
+ preflightTimer=setInterval(()=>preflight(),75000);
+ await preflight();
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
