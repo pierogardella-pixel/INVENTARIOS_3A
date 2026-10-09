@@ -150,7 +150,7 @@ body{background:var(--bg)!important}
  <div class="panel" style="border-top:3px solid #ff7a00;margin-bottom:15px">
  <div class="row" style="display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap">
  <div><strong id="ucaReference" style="color:#2145a3">Sin reglas · Importa TVU/TMR</strong><p id="ucaSource" style="margin-top:5px">Preparando inventario UCA…</p></div>
- <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="ucaUpload">＋ Cargar inventario UCA</button><button class="btn" id="ucaRulesUpload">↑ Importar TVU/TMR</button><input id="ucaRulesFile" type="file" accept=".xlsx" hidden><button class="btn" id="ucaExport">↓ Exportar alertas</button><input type="file" id="ucaFile" accept=".xlsx,.csv" hidden></div>
+ <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="ucaUpload">＋ Cargar inventario UCA</button><button class="btn" id="ucaRulesUpload">↑ Importar TVU/TMR</button><input id="ucaRulesFile" type="file" accept=".xlsx" hidden><button class="btn" id="ucaExport">↓ Exportar alertas</button><label style="margin:0">Histórico UCA <select id="ucaHistorySelect" aria-label="Consultar inventarios históricos UCA" style="width:200px"><option value="current">Stock más reciente</option></select></label><input type="file" id="ucaFile" accept=".xlsx,.csv" hidden></div>
  </div>
  <div class="uca-upload-status" id="ucaUploadStatus">Primero carga «TVU y TMR CEDIs - Tienda.xlsx» con «Importar TVU/TMR»; después importa las existencias y vencimientos con «Cargar inventario UCA». Las reglas se guardan cifradas en Google Sheets cuando estés conectado como administrador.</div>
  </div>
@@ -350,5 +350,5 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 
 <script src="./sheets-sync.js?v=revision-20261009-private"></script>
-<script src="./uca-module.js?v=5"></script>
+<script src="./uca-module.js?v=6"></script>
 </body></html>
