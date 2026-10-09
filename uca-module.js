@@ -188,44 +188,71 @@ function get(obj,aliases){
  return undefined
 }
 function extract(grids){
- let chosen;
- for(let [name,grid] of Object.entries(grids||{})){
+ // Reconoce por encabezados: WMS UCA, STOCK DETALLE y STOCK GLOBAL.
+ // No se presupone que K/L sean cantidades: en UCA son VENCIMIENTO y ESTADO.
+ let selected=null,score=-1;
+ for(const [name,grid] of Object.entries(grids||{})){
   if(!Array.isArray(grid))continue;
-  for(let i=0;i<Math.min(12,grid.length);i++){
-   let header=(grid[i]||[]).map(normalize);
-   if(header.some(h=>h==="sku"||h==="codigo sku"||h==="codigo producto")&&
-     (header.some(h=>["stock","cantidad","unidades","stock wms","stock disponible","cantidad disponible","stock global"].includes(h))||
-      grid.slice(i+1,i+8).some(row=>row&&row.length>=12&&(qty(row[10])!==null||qty(row[11])!==null)))){chosen={name,grid,start:i};break}
-  }if(chosen)break
+  for(let i=0;i<Math.min(15,grid.length);i++){
+   const hs=(grid[i]||[]).map(normalize);
+   const hasSku=hs.some(h=>["sku","codigo sku","codigo producto","cod sku","cod producto"].includes(h));
+   const hasQuantity=hs.some(h=>["stock","stock total","stock disponible","cantidad","unidades","stock wms","disponible","cantidad disponible","stock global"].includes(h));
+   if(!hasSku||!hasQuantity)continue;
+   const isUca=hs.includes("sku")&&hs.includes("cantidad")&&hs.includes("vencimiento")&&hs.includes("estado");
+   const isDetail=hs.some(h=>h.includes("vencimiento"))&&hs.includes("cantidad")&&hs.includes("estado");
+   const isGlobal=hs.includes("stock total")&&hs.includes("asignado")&&hs.includes("bloqueado");
+   let priority=isUca?100:isDetail?90:isGlobal?75:30;
+   if(normalize(name)==="uca")priority+=15;
+   if(priority>score){score=priority;selected={name,grid,index:i,isUca,isDetail,isGlobal}}
+  }
  }
- if(!chosen)throw Error("Se requiere una hoja con SKU y existencias numéricas en las columnas K y L (o un campo Stock de referencia).");
- let head=chosen.grid[chosen.start].map(v=>String(v??"")),result=[],discarded=0;
- for(let raw of chosen.grid.slice(chosen.start+1)){
-  let obj=Object.fromEntries(head.map((k,i)=>[k,raw?.[i]]));
-  let sku=skuValue(get(obj,["SKU","Código SKU","Código producto"]));
-  let rawK=raw?.[10],rawL=raw?.[11];
-  let stockK=qty(rawK),stockL=qty(rawL);
-  let val=get(obj,["Stock","Stock disponible","Stock WMS","Cantidad disponible","Cantidad","Unidades","Stock global"]);
+ if(!selected)throw Error("No encontré una hoja WMS con SKU y CANTIDAD/STOCK. Revisa los encabezados del Excel.");
+ const {name,grid,index,isUca,isDetail,isGlobal}=selected;
+ const head=(grid[index]||[]).map(x=>String(x??""));
+ const normalizeRow=row=>Object.fromEntries(head.map((k,i)=>[k,row?.[i]]));
+ const result=[];let discarded=0,invalid=0;
+ for(const raw of grid.slice(index+1)){
+  if(!raw||!raw.some(v=>v!==null&&v!==undefined&&v!==""))continue;
+  const obj=normalizeRow(raw);
+  const sku=skuValue(get(obj,["SKU","Código SKU","Código producto","COD. PRODUCTO","Cod SKU"]));
   if(!sku){discarded++;continue}
-  if(stockK===null&&stockL===null&&qty(val)===null){discarded++;continue}
-  // La cantidad mostrada es auxiliar; la clasificación usa exclusivamente K y L.
-  let stock=qty(val)??Math.max(stockK??0,stockL??0);
-  result.push({sku,stock,stockK,stockL,product:String(get(obj,["Producto","Nombre producto","Descripción","Descripcion","Nombre"])||""),category:String(get(obj,["Categoría","Categoria","Familia"])||""),
-   expiry:dateValue(get(obj,["Vencimiento","Fecha vencimiento","Fecha de vencimiento","Fecha caducidad","Caducidad","F. Vencimiento","FV"])),
-   received:dateValue(get(obj,["Fecha ingreso","Fecha de ingreso","Fecha recepción","Ingreso"])),
-   aisle:String(get(obj,["Pasillo","Aisle"])||""),location:String(get(obj,["Ubicación","Ubicacion"])||"")});
+  const val=get(obj,["Stock total","Stock disponible","Stock WMS","Cantidad disponible","Cantidad","Unidades","Stock global","Stock","Disponible"]);
+  const amount=qty(val),kl=(isUca||isDetail)?false:true;
+  const stockK=kl?qty(raw[10]):null,stockL=kl?qty(raw[11]):null;
+  if(amount===null&&stockK===null&&stockL===null){invalid++;continue}
+  const stockMode=kl?"kl":"wms";
+  result.push({
+   sku,stock:amount??Math.max(stockK??0,stockL??0),stockK,stockL,stockMode,
+   product:String(get(obj,["Producto","NOM. PRODUCTO","Nombre producto","Descripción","Descripcion","Nombre"])||""),
+   category:String(get(obj,["Categoría","Categoria","Familia","Zona"])||""),
+   expiry:dateValue(get(obj,["Vencimiento","Fecha vencimiento","F. VENCIMIENTO","Fecha de vencimiento","Fecha caducidad","Caducidad","FV"])),
+   received:dateValue(get(obj,["Fecha ingreso","Fecha de ingreso","Ingreso a almacen","Ingreso a almacén","Fecha recepción","Ingreso"])),
+   aisle:String(get(obj,["Pasillo","Aisle"])||""),
+   location:String(get(obj,["Ubicación","Ubicacion","Posicion"])||""),
+   zone:String(get(obj,["Zona","Tipo ubic.","TIPO"])||"")
+  });
  }
- if(!result.length)throw Error("No se encontraron filas válidas con SKU y stock.");
- const map=new Map();for(let r of result){let key=[r.sku,r.expiry,r.received,r.aisle,r.location].join("|"),old=map.get(key);if(old){old.stock+=r.stock;old.stockK=old.stockK!==null&&r.stockK!==null?old.stockK+r.stockK:null;old.stockL=old.stockL!==null&&r.stockL!==null?old.stockL+r.stockL:null}else map.set(key,r)}
- return {rows:[...map.values()],discarded};
+ if(!result.length)throw Error("El Excel no contiene productos con cantidades numéricas válidas.");
+ // Conservar lotes y ubicaciones; sumar únicamente filas de igual SKU, fecha y posición.
+ const rows=new Map();
+ for(const r of result){
+  const key=[r.sku,r.expiry,r.received,r.aisle,r.location,r.stockMode].join("|");
+  let old=rows.get(key);
+  if(old){
+   old.stock+=r.stock;
+   old.stockK=old.stockK!==null&&r.stockK!==null?old.stockK+r.stockK:null;
+   old.stockL=old.stockL!==null&&r.stockL!==null?old.stockL+r.stockL:null;
+  }else rows.set(key,r);
+ }
+ return {rows:[...rows.values()],discarded:discarded+invalid,source:name,mode:isGlobal?"global":isUca?"uca":isDetail?"detalle":"other"};
 }
 async function importFile(file){
  let status=$u("ucaUploadStatus");status.textContent="Importando "+file.name+"…";
  try{let grids=/\.csv$/i.test(file.name)?csvRead(await file.text()):await xlsxRead(file);
  let x=extract(grids);if(state.uca?.rows?.length&&!confirm("¿Guardar una nueva carga UCA y conservar la anterior en el historial?"))return;
- if(state.uca?.rows?.length){state.ucaHistory=[...(state.ucaHistory||[]),state.uca]}selectedSnapshot="current";state.uca={source:file.name,updatedAt:new Date().toISOString(),rows:x.rows};
+ if(state.uca?.rows?.length){state.ucaHistory=[...(state.ucaHistory||[]),state.uca]}selectedSnapshot="current";state.uca={source:file.name,sheet:x.source,mode:x.mode,updatedAt:new Date().toISOString(),rows:x.rows};
  let saved=await persist();if(!saved)throw Error("El navegador no pudo guardar el inventario.");
- status.textContent="✓ "+x.rows.length+" registros UCA guardados · "+x.discarded+" filas descartadas. Revisa sincronización en DATOS.";
+ status.textContent="✓ "+x.rows.length+" registros ("+x.source+") leídos; "+x.discarded+" descartados. Stock detectado: "+(x.mode==="uca"?"CANTIDAD (J)":x.mode==="detalle"?"CANTIDAD":"campos del reporte")+". Revisa la sincronización en DATOS.";
  render();
  }catch(e){status.textContent="⚠ "+e.message}
 }
