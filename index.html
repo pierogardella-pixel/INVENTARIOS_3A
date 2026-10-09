@@ -124,15 +124,26 @@ body{background:var(--bg)!important}
 <style>.uca-home-alerts{padding:14px 18px;background:#fff1e9;border:1px solid #ffcd9e;color:#915015;border-left:4px solid #ff7a00;border-radius:12px;margin:0 0 14px;font-weight:650;font-size:12px;cursor:pointer}.uca-home-alerts:hover{background:#ffe8d8}</style>
 <style id="uca-bars-chart-css">
 .uca-chart-panel{margin:0 0 15px;border-top:3px solid #2446a2}
-.uca-bars{display:grid;gap:24px;padding:8px 0 10px}
-.uca-bar-item{min-width:0}
-.uca-bar-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px;font-size:13px;color:#173476}
-.uca-bar-top span{font-weight:800;font-variant-numeric:tabular-nums;color:#243f86}
-.uca-bar-track{width:100%;height:27px;border-radius:8px;background:#edf1f8;overflow:hidden;position:relative}
-.uca-bar-fill{height:100%;min-width:0;border-radius:8px;transition:width .4s ease;box-shadow:inset 0 -3px 0 rgba(0,0,0,.09)}
-.uca-bar-blue{background:linear-gradient(90deg,#2444ac,#376de2)}
-.uca-bar-orange{background:linear-gradient(90deg,#ff7a00,#ffab3e)}
-.uca-chart-note{font-size:11px!important;color:#687a9a!important;margin:12px 0 0!important}
+.uca-aisle-heading{align-items:flex-start;gap:16px}
+.uca-chart-filters{display:flex;align-items:end;gap:11px;flex-wrap:wrap}
+.uca-chart-filters label{display:flex;flex-direction:column;gap:5px;min-width:175px;font-weight:750;font-size:10px;letter-spacing:.01em;color:#64758d;margin:0}
+.uca-chart-filters select{width:100%;min-height:37px;background:#fff;color:#19376b;font-size:12px;border:1px solid #d6dff0;border-radius:9px;padding:7px 10px;cursor:pointer;outline-offset:2px}
+.uca-chart-filters select:focus{border-color:#ff7a00;outline:2px solid #ff7a0030}
+.uca-chart-subhead{display:flex;justify-content:space-between;gap:15px;padding:9px 2px 15px;font-size:11px;color:#61728e;font-weight:650}
+.uca-chart-subhead span:first-child{color:#2145a3}
+.uca-aisle-bars{display:grid;gap:13px;padding:0 1px}
+.uca-aisle-row{display:grid;grid-template-columns:96px minmax(80px,1fr) 68px 130px;align-items:center;gap:13px;min-height:35px}
+.uca-aisle-row:hover .uca-aisle-bar{background:#e0e8f8}
+.uca-aisle-row:hover .uca-aisle-bar-fill{filter:brightness(1.05)}
+.uca-aisle-label{font-size:12px;font-weight:800;color:#153978;white-space:nowrap}
+.uca-aisle-bar{height:25px;border-radius:7px;overflow:hidden;background:#edf1f8}
+.uca-aisle-bar-fill{display:block;height:100%;border-radius:7px;background:linear-gradient(90deg,#2449b6,#ff8000);transition:width .35s ease;min-width:0}
+.uca-aisle-pct{text-align:right;font-size:12px;font-weight:850;color:#163ca6;font-variant-numeric:tabular-nums}
+.uca-aisle-meta{text-align:right;color:#687b97;font-weight:650;font-size:10px;white-space:nowrap}
+.uca-aisle-empty{padding:26px 16px;text-align:center;background:#f6f8fc;border:1px dashed #cbd8ee;color:#60718f;border-radius:12px;font-size:12px;line-height:1.6}
+.uca-chart-note{font-size:11px!important;color:#687a9a!important;margin:17px 0 0!important;line-height:1.6}
+@media(max-width:950px){.uca-aisle-heading{flex-direction:column}.uca-chart-filters{width:100%}.uca-aisle-row{grid-template-columns:80px 1fr 60px;gap:8px}.uca-aisle-meta{display:none}}
+@media(max-width:540px){.uca-chart-filters{flex-direction:column;align-items:stretch}.uca-chart-filters label{width:100%}.uca-chart-subhead{flex-direction:column;gap:4px}}
 </style>
 </head>
 <body><div class="layout"><aside class="sidebar">
@@ -168,9 +179,20 @@ body{background:var(--bg)!important}
  </div>
  <div class="uca-metrics" id="ucaMetrics"></div>
  <div class="panel uca-chart-panel">
-  <div class="panel-head"><div><h3>UCA · Distribución de productos por stock</h3><p>Clasificación por SKU: «Sin stock» solo si K = 0 y L = 0. Porcentaje calculado sobre los SKU verificables.</p></div><span class="tag blue">Stock según origen</span></div>
-  <div id="ucaStockBars" class="uca-bars" aria-label="Gráfico de barras de productos con stock y sin stock"></div>
-  <p id="ucaStockChartInfo" class="uca-chart-note">Carga un Excel UCA para visualizar los porcentajes.</p>
+  <div class="panel-head uca-aisle-heading">
+   <div><h3>UCA · Ubicaciones ocupadas por pasillo</h3><p>Gráfico de barras dinámico con etiquetas de porcentaje, filtrado por tipo de ubicación y zona.</p></div>
+   <div class="uca-chart-filters">
+    <label for="ucaTypeFilter">Tipo de ubicación<select id="ucaTypeFilter" aria-label="Filtrar tipo de ubicación UCA">
+     <option value="ACTIVO">Activo</option><option value="RESERVA">Reserva</option><option value="RESERVA_PISO">Reserva_Piso</option><option value="SOLO_RESERVAS">Solo reservas</option>
+    </select></label>
+    <label for="ucaZoneFilter">Zona de almacén<select id="ucaZoneFilter" aria-label="Filtrar zona UCA">
+     <option value="SECOS_FOOD">SECOS-FOOD</option><option value="SECOS_NONFOOD">SECOS-NONFOOD</option>
+    </select></label>
+   </div>
+  </div>
+  <div class="uca-chart-subhead"><span id="ucaAisleCount">0 ubicaciones · 0 pasillos</span><span>Porcentaje del total filtrado</span></div>
+  <div id="ucaAisleBars" class="uca-aisle-bars" aria-label="Gráfico de barras de ubicaciones ocupadas por pasillo y porcentaje"></div>
+  <p id="ucaAisleInfo" class="uca-chart-note">Se mostrará la participación porcentual de ubicaciones ocupadas por pasillo (no porcentaje de capacidad).</p>
  </div>
  <div id="ucaNotice" class="uca-notices"></div>
  <div class="panel" style="margin-top:14px"><div class="panel-head" style="align-items:center"><div><h3>Inventario UCA · Detalle por SKU y alertas</h3><p id="ucaCount">Sin datos cargados</p></div><div class="uca-controls">
@@ -367,5 +389,5 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 
 <script src="./sheets-sync.js?v=revision-20261009-pending-fix"></script>
-<script src="./uca-module.js?v=9-wms-uca"></script>
+<script src="./uca-module.js?v=10-pasillo-zona"></script>
 </body></html>
