@@ -78,7 +78,8 @@ function renderStockChart(stats){
  if(!panel)return;
  const bars=[{name:"Con stock",count:stats.stocked,pct:stats.pStock,tone:"blue"},{name:"Sin stock",count:stats.empty,pct:stats.pEmpty,tone:"orange"}];
  panel.innerHTML=bars.map(b=>'<div class="uca-bar-item"><div class="uca-bar-top"><strong>'+b.name+'</strong><span>'+nfmt(b.count)+' SKU · '+b.pct.toLocaleString("es-PE",{minimumFractionDigits:1,maximumFractionDigits:1})+'%</span></div><div class="uca-bar-track" role="progressbar" aria-label="'+b.name+'" aria-valuenow="'+b.pct.toFixed(1)+'" aria-valuemin="0" aria-valuemax="100"><div class="uca-bar-fill uca-bar-'+b.tone+'" style="width:'+b.pct.toFixed(3)+'%"></div></div></div>').join("");
- descr.textContent=stats.validated?("Base: "+nfmt(stats.validated)+" SKU verificados. En reportes WMS UCA el stock se toma de CANTIDAD (J); «Sin stock» solo se confirma cuando las columnas K y L son cantidades numéricas iguales a 0. "+nfmt(stats.unknown)+" SKU pendientes de validar."):("Sin SKU con stock verificable. En archivos WMS UCA se toma CANTIDAD (J), porque K es VENCIMIENTO y L es ESTADO.");
+ const isWMS=stockRows().some(x=>stockBasis(x)==="wms");
+ descr.textContent=stats.validated?("Base: "+nfmt(stats.validated)+" SKU clasificados; "+(isWMS?"en UCA WMS se usa CANTIDAD (J) para stock positivo; ":"")+"para «Sin stock» se requiere K=0 y L=0 en campos de existencias. "+nfmt(stats.unknown)+" SKU por validar."):("Sin SKU verificables. En archivos WMS UCA se usa la CANTIDAD (J), porque K es VENCIMIENTO y L es ESTADO.");
 }
 function evaluate(r){
  let t=reference.get(skuValue(r.sku)),left=remaining(r.expiry),stored=r.received?-remaining(r.received):null,alerts=[],kind=stockKind(r);
@@ -140,7 +141,8 @@ function render(){
  if(!reference.size)notices.push("Para evaluar TVU/TMR, carga el archivo de reglas en «Importar TVU/TMR». Se guardará cifrado para las computadoras autorizadas.");
  if(bad.length)notices.push("⚠ "+unique(bad)+" SKU con alertas. Revisa los resultados y sus fechas antes de despachar.");
  if(unknown.length)notices.push(unique(unknown)+" SKU con stock no tienen fecha de vencimiento verificable.");
- notices.push("Regla Sin stock: K = 0 y L = 0, solo si ambas columnas son numéricas de existencias. En el reporte WMS UCA, J=CANTIDAD, K=VENCIMIENTO y L=ESTADO; el sistema utiliza J para productos con stock, pero no inventa SKU sin stock. Los no verificables quedan fuera del porcentaje.");
+ notices.push("Regla Sin stock: se exige K=0 y L=0 únicamente cuando ambas columnas corresponden a campos numéricos. En UCA del WMS, J=CANTIDAD, K=VENCIMIENTO y L=ESTADO: se toma J como stock; el Excel solo enumera productos registrados, no los que faltan.");
+ if((currentSnapshot()?.mode==="global")||(String(currentSnapshot()?.source||"").toUpperCase().includes("STOCK GLOBAL")))notices.push("ATENCIÓN STOCK GLOBAL: K es ASIGNADO y L BLOQUEADO. Que ambos sean 0 NO significa stock físico 0: comprueba STOCK TOTAL (I) y DISPONIBLE (J). El gráfico K/L representa la regla personalizada, no una rotura real de stock.");
  $u("ucaNotice").innerHTML=notices.map(t=>'<p>'+html(t)+'</p>').join("");
  let r=records.filter(x=>(filter==="all"||filter==="stock"&&stockKind(x)==="stock"||filter==="none"&&stockKind(x)==="none"||filter==="near"&&stockKind(x)==="stock"&&x.left!==null&&x.left<=daysWindow||filter==="alert"&&x.status==="critical"||filter==="unknown"&&x.status==="unknown")&&(!query||[x.sku,x.product,x.category,x.aisle,...x.alerts].some(t=>normalize(t).includes(query))));
  let priority={critical:0,unknown:1,ok:2,none:3};
@@ -217,7 +219,10 @@ function extract(grids){
   const sku=skuValue(get(obj,["SKU","Código SKU","Código producto","COD. PRODUCTO","Cod SKU"]));
   if(!sku){discarded++;continue}
   const val=get(obj,["Stock total","Stock disponible","Stock WMS","Cantidad disponible","Cantidad","Unidades","Stock global","Stock","Disponible"]);
-  const amount=qty(val),kl=(isUca||isDetail)?false:true;
+  const amount=qty(val);
+  const klHeaderNames=[head[10],head[11]].map(normalize);
+  const numericKLPair=grid.slice(index+1,index+25).some(row=>qty(row?.[10])!==null&&qty(row?.[11])!==null);
+  const kl=!(isUca||isDetail)&&(isGlobal||numericKLPair||klHeaderNames.every(h=>/stock|cantidad|existencia|disponible|asignado|bloqueado/.test(h)));
   const stockK=kl?qty(raw[10]):null,stockL=kl?qty(raw[11]):null;
   if(amount===null&&stockK===null&&stockL===null){invalid++;continue}
   const stockMode=kl?"kl":"wms";
