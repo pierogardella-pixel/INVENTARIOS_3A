@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const $u=id=>document.getElementById(id);
-let reference=new Map(),referenceStatus="Sin reglas cargadas · Importa TVU/TMR",lastRuleState=null,filter="all",query="",daysWindow=20,selectedSnapshot="current";
+let reference=new Map(),referenceStatus="Sin reglas cargadas · Importa TVU/TMR",lastRuleState=null,filter="all",query="",daysWindow=20,selectedSnapshot="current",aisleType="ACTIVO",aisleZone="SECOS_FOOD";
 const html=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const normalize=s=>String(s??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const skuValue=s=>String(s??"").trim().replace(/\.0+$/,"");
@@ -73,14 +73,78 @@ function stockSummary(rows){
  const validated=stocked+empty,total=validated+unknown;
  return {stocked,empty,unknown,validated,total,pStock:validated?100*stocked/validated:0,pEmpty:validated?100*empty/validated:0};
 }
-function renderStockChart(stats){
- const panel=$u("ucaStockBars"),descr=$u("ucaStockChartInfo");
- if(!panel)return;
- const bars=[{name:"Con stock",count:stats.stocked,pct:stats.pStock,tone:"blue"},{name:"Sin stock",count:stats.empty,pct:stats.pEmpty,tone:"orange"}];
- panel.innerHTML=bars.map(b=>'<div class="uca-bar-item"><div class="uca-bar-top"><strong>'+b.name+'</strong><span>'+nfmt(b.count)+' SKU · '+b.pct.toLocaleString("es-PE",{minimumFractionDigits:1,maximumFractionDigits:1})+'%</span></div><div class="uca-bar-track" role="progressbar" aria-label="'+b.name+'" aria-valuenow="'+b.pct.toFixed(1)+'" aria-valuemin="0" aria-valuemax="100"><div class="uca-bar-fill uca-bar-'+b.tone+'" style="width:'+b.pct.toFixed(3)+'%"></div></div></div>').join("");
- const isWMS=stockRows().some(x=>stockBasis(x)==="wms");
- descr.textContent=stats.validated?("Base: "+nfmt(stats.validated)+" SKU clasificados; "+(isWMS?"en UCA WMS se usa CANTIDAD (J) para stock positivo; ":"")+"para «Sin stock» se requiere K=0 y L=0 en campos de existencias. "+nfmt(stats.unknown)+" SKU por validar."):("Sin SKU verificables. En archivos WMS UCA se usa la CANTIDAD (J), porque K es VENCIMIENTO y L es ESTADO.");
+
+function storageType(r){
+ const t=normalize(r.storageType||r.locationType||r.type||"").replace(/\s/g,"_").toUpperCase();
+ if(["ACTIVO","RESERVA","RESERVA_PISO","DROP_ZONE"].includes(t))return t;
+ const loc=String(r.location||"").trim().match(/^(\d{1,2})-\d{1,3}-(\d{2})-\d{2}/);
+ const aisle=Number(r.aisle||loc?.[1]),level=Number(loc?.[2]);
+ if(!loc||!Number.isFinite(aisle))return "";
+ if(aisle>=9&&aisle<=13)return "RESERVA_PISO";
+ if(aisle>=1&&aisle<=8&&level===1)return "ACTIVO";
+ if(aisle>=1&&aisle<=4&&level>=2&&level<=5)return "RESERVA";
+ return "";
 }
+function stockZone(r){return normalize(r.zone||r.category||"").replace(/\s/g,"_").toUpperCase()}
+function aisleLabel(r){
+ const raw=String(r.aisle??"").trim()||(String(r.location||"").match(/^(\d{1,2})-/)||[])[1]||"";
+ const number=Number(raw);
+ return Number.isInteger(number)&&number>=1&&number<=99?String(number).padStart(2,"0"):"";
+}
+function matchedStorage(type,choice){
+ if(choice==="SOLO_RESERVAS")return type==="RESERVA"||type==="RESERVA_PISO";
+ return type===choice;
+}
+function aisleStats(rows,type=aisleType,zone=aisleZone){
+ const result=new Map();
+ let inferred=0,unknownType=0,otherZones=0;
+ // Las barras representan ubicaciones ocupadas únicas por pasillo, no bultos.
+ // El porcentaje es la participación de cada pasillo en las ubicaciones
+ // filtradas; no implica porcentaje de capacidad de rack.
+ for(const r of rows){
+  const real=storageType(r),aisle=aisleLabel(r),z=stockZone(r);
+  if(!real){unknownType++;continue}
+  if(!matchedStorage(real,type)||!aisle)continue;
+  if(!result.has(aisle))result.set(aisle,{aisle,locations:new Set(),sku:new Set(),units:0,category:real});
+  if(z!==zone){otherZones++;continue}
+  const qtyVal=qty(r.stock);
+  if(qtyVal===null||qtyVal<=0)continue;
+  const location=String(r.location||"").trim().toUpperCase();
+  if(!location)continue;
+  const d=result.get(aisle);
+  d.locations.add(location);
+  d.sku.add(skuValue(r.sku));
+  d.units+=qtyVal;
+  if(!r.storageType&&!r.locationType&&!r.type)inferred++;
+ }
+ const items=[...result.values()].sort((a,b)=>Number(a.aisle)-Number(b.aisle));
+ const total=items.reduce((n,a)=>n+a.locations.size,0);
+ return {rows:items.map(a=>({aisle:a.aisle,locations:a.locations.size,sku:a.sku.size,units:a.units,pct:total?100*a.locations.size/total:0})),total,inferred,unknownType,otherZones};
+}
+function renderAisleChart(){
+ const target=$u("ucaAisleBars"),note=$u("ucaAisleInfo"),count=$u("ucaAisleCount");
+ if(!target)return;
+ const s=aisleStats(stockRows());
+ if(count)count.textContent=nfmt(s.total)+" ubicaciones · "+s.rows.length+" pasillos";
+ if(!s.total){
+  target.innerHTML='<div class="uca-aisle-empty">Sin ubicaciones para estos filtros. Comprueba que el Excel contenga <strong>TIPO, ZONA, PASILLO, UBICACIÓN y CANTIDAD</strong>. Si cargaste una versión anterior, vuelve a importar el mismo archivo UCA para actualizar estos campos.</div>';
+ }else{
+  target.innerHTML=s.rows.map(r=>{
+   const pct=r.pct.toLocaleString("es-PE",{minimumFractionDigits:1,maximumFractionDigits:1});
+   const width=Math.max(0,Math.min(100,r.pct)).toFixed(3);
+   return '<div class="uca-aisle-row" title="Pasillo '+r.aisle+': '+nfmt(r.locations)+' ubicaciones · '+nfmt(r.sku)+' SKU · '+nfmt(r.units)+' bultos">'
+    +'<span class="uca-aisle-label">Pasillo '+r.aisle+'</span>'
+    +'<div class="uca-aisle-bar"><span class="uca-aisle-bar-fill" style="width:'+width+'%"></span></div>'
+    +'<strong class="uca-aisle-pct">'+pct+'%</strong>'
+    +'<small class="uca-aisle-meta">'+nfmt(r.locations)+' UBI · '+nfmt(r.sku)+' SKU</small></div>';
+  }).join("");
+ }
+ const tp=aisleType==="SOLO_RESERVAS"?"RESERVA + RESERVA_PISO":aisleType;
+ note.textContent="TIPO: "+tp+" · ZONA: "+aisleZone.replace("_","-")
+  +" · Porcentaje = ubicaciones únicas ocupadas del pasillo ÷ "+nfmt(s.total)+" ubicaciones únicas ocupadas del filtro."
+  +(s.inferred?" "+nfmt(s.inferred)+" filas con tipo inferido de ubicación; importa de nuevo para validar TIPO.":"");
+}
+
 function evaluate(r){
  let t=reference.get(skuValue(r.sku)),left=remaining(r.expiry),stored=r.received?-remaining(r.received):null,alerts=[],kind=stockKind(r);
  if(kind==="stock"){
@@ -124,7 +188,7 @@ function render(){
  const unique=records=>new Set(records.map(r=>r.sku)).size;
  const kpi=(title,value,desc,color)=>'<div class="metric"><label>'+html(title)+'</label><div class="value '+color+'">'+nfmt(value)+'</div><small>'+html(desc)+'</small></div>';
  $u("ucaMetrics").innerHTML=kpi("Productos con stock",summary.stocked,"Cantidad WMS (J) o stock K/L positivo","green")+kpi("Productos sin stock",summary.empty,"K = 0 y L = 0 en todas sus filas","red")+kpi("Próximos / vencidos",unique(near),"SKU con fecha y ≤ "+daysWindow+" días","red")+kpi("Alertas críticas",unique(bad),"TMR, vencimiento o estadía","red")+kpi("Sin fecha de vencimiento",unique(unknown),"SKU con cumplimiento no verificable","blue");
- renderStockChart(summary);
+ renderAisleChart();
  $u("ucaReference").textContent=referenceStatus;
  const archives=state.ucaHistory||[],picker=$u("ucaHistorySelect");
  if(picker){
@@ -265,6 +329,8 @@ function init(){
  if(!$u("ucaUpload"))return;
  $u("ucaUpload").onclick=()=>$u("ucaFile").click();
  $u("ucaHistorySelect").onchange=e=>{selectedSnapshot=e.target.value;render()};
+ $u("ucaTypeFilter").onchange=e=>{aisleType=e.target.value;renderAisleChart()};
+ $u("ucaZoneFilter").onchange=e=>{aisleZone=e.target.value;renderAisleChart()};
  $u("ucaRulesUpload").onclick=()=>$u("ucaRulesFile").click();
  $u("ucaRulesFile").onchange=async e=>{let f=e.target.files?.[0];if(!f)return;e.target.value="";if(window.inventoryCloudRole==="viewer")return alert("Modo consulta: no puedes cambiar reglas.");await importTVUTMR(f)};
  $u("ucaFile").onchange=async e=>{let file=e.target.files?.[0];if(!file)return;e.target.value="";if(window.inventoryCloudRole==="viewer")return alert("Modo consulta: no se pueden cargar inventarios.");await importFile(file)};
