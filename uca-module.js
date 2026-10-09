@@ -40,6 +40,16 @@ function evaluate(r){
  return {...r,rule:t,left,alerts,status}
 }
 function getRecords(){return stockRows().map(evaluate)}
+function renderHome(){
+ const box=$u("ucaHomeAlerts");if(!box)return;
+ const all=getRecords(),stock=all.filter(x=>x.stock>0);
+ if(!stock.length){box.style.display="none";return}
+ const bad=stock.filter(x=>x.status==="critical"),unknown=stock.filter(x=>x.left===null);
+ const content=bad.length?"⚠ UCA · "+bad.length+" SKU con incumplimientos TVU/TMR o vencimiento. Revisa los casos.":unknown.length?"◈ UCA · "+unknown.length+" SKU con stock sin fecha de vencimiento. Importa el reporte UCA para verificar TVU/TMR.":"✓ UCA · Los SKU con fechas verificables no presentan alertas de vencimiento o TVU/TMR.";
+ box.textContent=content;box.style.display="block";
+ box.onclick=()=>selectedView("uca");
+}
+window.renderUCAHome=renderHome;
 function render(){
  let records=getRecords(),inStock=records.filter(r=>r.stock>0),zero=records.filter(r=>r.stock<=0),bad=inStock.filter(r=>r.status==="critical"),near=inStock.filter(r=>r.left!==null&&r.left<=daysWindow),unknown=inStock.filter(r=>r.left===null);
  const kpi=(title,value,desc,color)=>'<div class="metric"><label>'+html(title)+'</label><div class="value '+color+'">'+nfmt(value)+'</div><small>'+html(desc)+'</small></div>';
@@ -62,6 +72,7 @@ function render(){
    return '<tr><td><b>'+html(x.sku)+'</b><small>'+html(x.product||"Nombre no informado")+'</small></td><td class="num">'+nfmt(x.stock)+'</td><td>'+html(x.aisle||x.location||"—")+'</td><td>'+html(x.expiry||"Sin fecha")+'</td><td class="num">'+(x.left===null?"—":x.left+" d")+'</td><td class="num">'+(x.rule?.tmr??"N/A")+'</td><td><span class="uca-tag uca-'+x.status+'">'+label+'</span></td><td>'+html(x.alerts.join(" · ")||"—")+'</td></tr>'
  }).join("")||'<tr><td colspan="8" class="empty">No hay datos para este filtro. Carga un inventario UCA.</td></tr>';
  $u("ucaLimit").textContent=r.length>500?"Mostrando 500 filas: utiliza filtros o exportación para consultar todas.":"";
+ renderHome();
 }
 window.renderUCA=render;
 async function rules(){
@@ -70,7 +81,7 @@ async function rules(){
   let v=JSON.parse(await new Response(stream).text());for(let r of v.items)reference.set(skuValue(r[0]),{tvu:r[1],tmr:r[2],store:r[3],max:r[4],active:r[5],exception:r[6]});
   referenceStatus=reference.size+" reglas TVU/TMR cargadas";
  }catch(e){referenceStatus="Error cargando reglas: "+e.message}
- if(document.querySelector("#view-uca.active"))render();
+ if(document.querySelector("#view-uca.active"))render();else renderHome();
 }
 function get(obj,aliases){
  const keys=Object.keys(obj);for(let a of aliases){let k=keys.find(x=>normalize(x)===normalize(a));if(k)return obj[k]}
