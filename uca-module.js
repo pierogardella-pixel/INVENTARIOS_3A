@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const $u=id=>document.getElementById(id);
-let reference=new Map(),referenceStatus="Cargando 662 reglas TVU/TMR…",filter="all",query="",daysWindow=20;
+let reference=new Map(),referenceStatus="Sin reglas cargadas · Importa TVU/TMR",lastRuleState=null,filter="all",query="",daysWindow=20;
 const html=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const normalize=s=>String(s??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const skuValue=s=>String(s??"").trim().replace(/\.0+$/,"");
@@ -39,7 +39,17 @@ function evaluate(r){
  const critical=alerts.some(x=>!x.startsWith("SIN ")),status=Number(r.stock)<=0?"none":critical?"critical":alerts.length?"unknown":"ok";
  return {...r,rule:t,left,alerts,status}
 }
-function getRecords(){return stockRows().map(evaluate)}
+function refreshRuleState(){
+ if(lastRuleState===state.tvuRules)return;
+ lastRuleState=state.tvuRules;
+ reference.clear();
+ for(const r of state.tvuRules?.rows||[]){
+   const v={sku:skuValue(r[0]),name:r[1]||"",category:r[2]||"",tvu:r[3],tmr:r[4],store:r[5],max:r[6],active:r[7],exception:r[8]};
+   if(v.sku)reference.set(v.sku,v)
+ }
+ referenceStatus=reference.size?reference.size+" productos TVU/TMR · "+(state.tvuRules.source||"Reglas cargadas"):"Sin reglas TVU/TMR: carga el Excel de referencia una vez";
+}
+function getRecords(){refreshRuleState();return stockRows().map(evaluate)}
 function renderHome(){
  const box=$u("ucaHomeAlerts");if(!box)return;
  const all=getRecords(),stock=all.filter(x=>x.stock>0);
@@ -59,7 +69,7 @@ function render(){
  $u("ucaSource").textContent=state.uca?.rows?"Archivo UCA · "+state.uca.source+" · "+new Date(state.uca.updatedAt).toLocaleString("es-PE"):"Último conteo WMS por pasillo · "+latestPerAisle().size+"/8";
  const notices=[];
  if(!state.uca?.rows)notices.push("Los conteos WMS no incluyen fecha de vencimiento. Para calcular alertas reales, importa un Excel UCA con SKU, Stock y Vencimiento.");
- if(!reference.size)notices.push("No se pudo cargar el catálogo TVU/TMR; verifica la conexión a GitHub.");
+ if(!reference.size)notices.push("Para evaluar TVU/TMR, carga el archivo de reglas en «Importar TVU/TMR». Se guardará cifrado para las computadoras autorizadas.");
  if(bad.length)notices.push("⚠ "+unique(bad)+" SKU con alertas. Revisa los resultados y sus fechas antes de despachar.");
  if(unknown.length)notices.push(unique(unknown)+" SKU con stock no tienen fecha de vencimiento verificable.");
  notices.push("La ausencia de un SKU en los archivos no equivale a stock cero. Solo se clasifica «Sin stock» cuando se reporta cantidad 0.");
@@ -70,19 +80,40 @@ function render(){
  $u("ucaCount").textContent=r.length+" registros";
  $u("ucaTable").innerHTML=r.slice(0,500).map(x=>{
    let label={none:"Sin stock",critical:"Alerta",unknown:"Por validar",ok:"Conforme"}[x.status];
-   return '<tr><td><b>'+html(x.sku)+'</b><small>'+html(x.product||"Nombre no informado")+'</small></td><td class="num">'+nfmt(x.stock)+'</td><td>'+html(x.aisle||x.location||"—")+'</td><td>'+html(x.expiry||"Sin fecha")+'</td><td class="num">'+(x.left===null?"—":x.left+" d")+'</td><td class="num">'+(x.rule?.tvu??"N/A")+'</td><td class="num">'+(x.rule?.tmr??"N/A")+'</td><td class="num">'+(x.rule?.store??"N/A")+'</td><td class="num">'+(x.rule?.max??"N/A")+'</td><td><span class="uca-tag uca-'+x.status+'">'+label+'</span></td><td>'+html(x.alerts.join(" · ")||"—")+'</td></tr>'
+   return '<tr><td><b>'+html(x.sku)+'</b><small>'+html(x.product||x.rule?.name||"Nombre no informado")+'</small></td><td class="num">'+nfmt(x.stock)+'</td><td>'+html(x.aisle||x.location||"—")+'</td><td>'+html(x.expiry||"Sin fecha")+'</td><td class="num">'+(x.left===null?"—":x.left+" d")+'</td><td class="num">'+(x.rule?.tvu??"N/A")+'</td><td class="num">'+(x.rule?.tmr??"N/A")+'</td><td class="num">'+(x.rule?.store??"N/A")+'</td><td class="num">'+(x.rule?.max??"N/A")+'</td><td><span class="uca-tag uca-'+x.status+'">'+label+'</span></td><td>'+html(x.alerts.join(" · ")||"—")+'</td></tr>'
  }).join("")||'<tr><td colspan="11" class="empty">No hay datos para este filtro. Carga un inventario UCA.</td></tr>';
  $u("ucaLimit").textContent=r.length>500?"Mostrando 500 filas: utiliza filtros o exportación para consultar todas.":"";
  renderHome();
 }
 window.renderUCA=render;
-async function rules(){
- try{let x=await fetch("./uca-rules.txt",{cache:"force-cache"});if(!x.ok)throw Error("Catálogo no disponible");
-  let b=Uint8Array.from(atob((await x.text()).trim()),c=>c.charCodeAt(0));let stream=new Blob([b]).stream().pipeThrough(new DecompressionStream("gzip"));
-  let v=JSON.parse(await new Response(stream).text());for(let r of v.items)reference.set(skuValue(r[0]),{tvu:r[1],tmr:r[2],store:r[3],max:r[4],active:r[5],exception:r[6]});
-  referenceStatus=reference.size+" reglas TVU/TMR cargadas";
- }catch(e){referenceStatus="Error cargando reglas: "+e.message}
- if(document.querySelector("#view-uca.active"))render();else renderHome();
+function rules(){refreshRuleState();if(document.querySelector("#view-uca.active"))render();else renderHome()}
+function referenceExcel(grids){
+ let grid=Object.entries(grids||{}).find(([name,rows])=>normalize(name)==="tmrs"||rows?.some(r=>Array.isArray(r)&&r.map(normalize).includes("tvu")&&r.map(normalize).includes("sku")))?.[1];
+ if(!grid)throw Error("No se encontró la hoja TMRs de TVU/TMR.");
+ let headerIndex=grid.findIndex(r=>Array.isArray(r)&&r.map(normalize).includes("tvu")&&r.map(normalize).includes("sku"));
+ if(headerIndex<0)throw Error("Falta el encabezado SKU y TVU.");
+ let head=grid[headerIndex].map(normalize),column=name=>head.indexOf(normalize(name)),indexSku=column("SKU"),indexTVU=column("TVU"),indexTMR=column("TMR");
+ if(indexSku<0||indexTVU<0||indexTMR<0)throw Error("El archivo debe incluir SKU, TVU y TMR.");
+ const numberOrNull=v=>v!==""&&v!=null&&Number.isFinite(Number(v))?Number(v):null;
+ let exceptions=new Map();
+ for(let r of grid){let id=r?.[12];if(id!=null&&/^\\d{5,}$/.test(String(id).trim()))exceptions.set(skuValue(id),[numberOrNull(r[14])??r[14],numberOrNull(r[15])??r[15]])}
+ let output=[];
+ for(let r of grid.slice(headerIndex+1)){
+  let sku=skuValue(r?.[indexSku]);if(!/^\\d{5,}$/.test(sku))continue;
+  output.push([sku,String(r?.[column("Nombre")]||""),String(r?.[column("Categoría")]||""),numberOrNull(r[indexTVU]),numberOrNull(r[indexTMR]),numberOrNull(r[column("TMR TIENDA")]),numberOrNull(r[column("DIAS MAX ALMACEN")]),String(r?.[column("Activo / Inactivo")]||""),exceptions.get(sku)||null])
+ }
+ if(output.length<50)throw Error("Solo se reconocieron "+output.length+" SKU. Comprueba que sea el Excel TVU/TMR correcto.");
+ return output;
+}
+async function importTVUTMR(file){
+ const label=$u("ucaUploadStatus");label.textContent="Leyendo referencia TVU/TMR…";
+ try{
+  let rows=referenceExcel(await xlsxRead(file));
+  if(state.tvuRules?.rows?.length&&!confirm("¿Actualizar la referencia TVU/TMR actual con este Excel?"))return;
+  state.tvuRules={source:file.name,updatedAt:new Date().toISOString(),rows};
+  let saved=await persist();if(!saved)throw Error("No se pudieron guardar las reglas.");
+  lastRuleState=null;rules();label.textContent="✓ "+rows.length+" SKU con reglas TVU/TMR · guardados. Revisa en DATOS la sincronización con Google Sheets.";
+ }catch(e){label.textContent="⚠ "+e.message}
 }
 function get(obj,aliases){
  const keys=Object.keys(obj);for(let a of aliases){let k=keys.find(x=>normalize(x)===normalize(a));if(k)return obj[k]}
@@ -128,6 +159,8 @@ async function importFile(file){
 function init(){
  if(!$u("ucaUpload"))return;
  $u("ucaUpload").onclick=()=>$u("ucaFile").click();
+ $u("ucaRulesUpload").onclick=()=>$u("ucaRulesFile").click();
+ $u("ucaRulesFile").onchange=async e=>{let f=e.target.files?.[0];if(!f)return;e.target.value="";if(window.inventoryCloudRole==="viewer")return alert("Modo consulta: no puedes cambiar reglas.");await importTVUTMR(f)};
  $u("ucaFile").onchange=async e=>{let file=e.target.files?.[0];if(!file)return;e.target.value="";if(window.inventoryCloudRole==="viewer")return alert("Modo consulta: no se pueden cargar inventarios.");await importFile(file)};
  $u("ucaSearch").oninput=e=>{query=normalize(e.target.value);render()};
  $u("ucaFilter").onchange=e=>{filter=e.target.value;render()};
