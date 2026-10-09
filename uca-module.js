@@ -52,15 +52,16 @@ function renderHome(){
 window.renderUCAHome=renderHome;
 function render(){
  let records=getRecords(),inStock=records.filter(r=>r.stock>0),zero=records.filter(r=>r.stock<=0),bad=inStock.filter(r=>r.status==="critical"),near=inStock.filter(r=>r.left!==null&&r.left<=daysWindow),unknown=inStock.filter(r=>r.left===null);
+ const unique=records=>new Set(records.map(r=>r.sku)).size;
  const kpi=(title,value,desc,color)=>'<div class="metric"><label>'+html(title)+'</label><div class="value '+color+'">'+nfmt(value)+'</div><small>'+html(desc)+'</small></div>';
- $u("ucaMetrics").innerHTML=kpi("Con stock",inStock.length,"SKU con cantidad positiva","green")+kpi("Sin stock",zero.length,"SKU con cantidad cero reportada","red")+kpi("Próximos / vencidos",near.length,"Con fecha y ≤ "+daysWindow+" días","red")+kpi("No cumplen TVU/TMR",bad.length,"Incumplimientos detectados","red")+kpi("Sin fecha de vencimiento",unknown.length,"Cumplimiento sin verificar","blue");
+ $u("ucaMetrics").innerHTML=kpi("Productos con stock",unique(inStock),"SKU con cantidad positiva","green")+kpi("Productos sin stock",unique(zero),"SKU con cantidad cero reportada","red")+kpi("Próximos / vencidos",unique(near),"SKU con fecha y ≤ "+daysWindow+" días","red")+kpi("Alertas críticas",unique(bad),"TMR, vencimiento o estadía","red")+kpi("Sin fecha de vencimiento",unique(unknown),"SKU con cumplimiento no verificable","blue");
  $u("ucaReference").textContent=referenceStatus;
  $u("ucaSource").textContent=state.uca?.rows?"Archivo UCA · "+state.uca.source+" · "+new Date(state.uca.updatedAt).toLocaleString("es-PE"):"Último conteo WMS por pasillo · "+latestPerAisle().size+"/8";
  const notices=[];
  if(!state.uca?.rows)notices.push("Los conteos WMS no incluyen fecha de vencimiento. Para calcular alertas reales, importa un Excel UCA con SKU, Stock y Vencimiento.");
  if(!reference.size)notices.push("No se pudo cargar el catálogo TVU/TMR; verifica la conexión a GitHub.");
- if(bad.length)notices.push("⚠ "+bad.length+" SKU con alertas. Revisa los resultados y sus fechas antes de despachar.");
- if(unknown.length)notices.push(unknown.length+" SKU con stock no tienen fecha de vencimiento verificable.");
+ if(bad.length)notices.push("⚠ "+unique(bad)+" SKU con alertas. Revisa los resultados y sus fechas antes de despachar.");
+ if(unknown.length)notices.push(unique(unknown)+" SKU con stock no tienen fecha de vencimiento verificable.");
  notices.push("La ausencia de un SKU en los archivos no equivale a stock cero. Solo se clasifica «Sin stock» cuando se reporta cantidad 0.");
  $u("ucaNotice").innerHTML=notices.map(t=>'<p>'+html(t)+'</p>').join("");
  let r=records.filter(x=>(filter==="all"||filter==="stock"&&x.stock>0||filter==="none"&&x.stock<=0||filter==="near"&&x.stock>0&&x.left!==null&&x.left<=daysWindow||filter==="alert"&&x.status==="critical"||filter==="unknown"&&x.status==="unknown")&&(!query||[x.sku,x.product,x.category,x.aisle,...x.alerts].some(t=>normalize(t).includes(query))));
@@ -111,7 +112,7 @@ function extract(grids){
    aisle:String(get(obj,["Pasillo","Aisle"])||""),location:String(get(obj,["Ubicación","Ubicacion"])||"")});
  }
  if(!result.length)throw Error("No se encontraron filas válidas con SKU y stock.");
- const map=new Map();for(let r of result){let key=[r.sku,r.expiry,r.received].join("|"),old=map.get(key);if(old)old.stock+=r.stock;else map.set(key,r)}
+ const map=new Map();for(let r of result){let key=[r.sku,r.expiry,r.received,r.aisle,r.location].join("|"),old=map.get(key);if(old)old.stock+=r.stock;else map.set(key,r)}
  return {rows:[...map.values()],discarded};
 }
 async function importFile(file){
