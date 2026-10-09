@@ -43,7 +43,7 @@ function stockBasis(r){
  // En ese reporte J=CANTIDAD, K=VENCIMIENTO y L=ESTADO.
  // Las fechas numéricas de Excel NO representan stock de la columna K.
  const k=qty(r.stockK),l=qty(r.stockL),j=qty(r.stock);
- if(j!==null&&l===null&&(k===null||(k>=30000&&k<100000&&!!r.expiry)))return "wms";
+ if(j!==null&&l===null&&(k===null||k===0||(k>=30000&&k<100000&&!!r.expiry)))return "wms";
  return "kl";
 }
 function stockKind(r){
