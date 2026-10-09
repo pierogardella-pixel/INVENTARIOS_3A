@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const $u=id=>document.getElementById(id);
-let reference=new Map(),referenceStatus="Sin reglas cargadas · Importa TVU/TMR",lastRuleState=null,filter="all",query="",daysWindow=20;
+let reference=new Map(),referenceStatus="Sin reglas cargadas · Importa TVU/TMR",lastRuleState=null,filter="all",query="",daysWindow=20,selectedSnapshot="current";
 const html=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const normalize=s=>String(s??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const skuValue=s=>String(s??"").trim().replace(/\.0+$/,"");
@@ -17,8 +17,14 @@ function dateValue(v){
  return "";
 }
 function remaining(iso){if(!iso)return null;let t=new Date();let n=Date.UTC(t.getFullYear(),t.getMonth(),t.getDate());return Math.round((Date.parse(iso+"T00:00:00Z")-n)/86400000)}
+function currentSnapshot(){
+ if(selectedSnapshot==="current")return state.uca;
+ let id=Number(String(selectedSnapshot).replace(/^h/,""));
+ return Number.isInteger(id)?state.ucaHistory?.[id]||state.uca:state.uca;
+}
 function stockRows(){
- if(Array.isArray(state.uca?.rows))return state.uca.rows;
+ const snap=currentSnapshot();
+ if(Array.isArray(snap?.rows))return snap.rows;
  const map=new Map();
  for(const r of rowsOf(effective())){if(!r.sku)continue;let k=skuValue(r.sku),v=map.get(k)||{sku:k,product:r.product||"",category:r.category||"",stock:0,expiry:"",received:"",aisle:r.aisle,location:r.location};v.stock+=Math.max(0,Number(r.system)||0);map.set(k,v)}
  return [...map.values()]
@@ -52,7 +58,7 @@ function refreshRuleState(){
 function getRecords(){refreshRuleState();return stockRows().map(evaluate)}
 function renderHome(){
  const box=$u("ucaHomeAlerts");if(!box)return;
- const all=getRecords(),stock=all.filter(x=>x.stock>0);
+ const keep=selectedSnapshot;selectedSnapshot="current";const all=getRecords();selectedSnapshot=keep;const stock=all.filter(x=>x.stock>0);
  if(!stock.length){box.style.display="none";return}
  const bad=stock.filter(x=>x.status==="critical"),unknown=stock.filter(x=>x.left===null);
  const content=bad.length?"⚠ UCA · "+bad.length+" SKU con incumplimientos TVU/TMR o vencimiento. Revisa los casos.":unknown.length?"◈ UCA · "+unknown.length+" SKU con stock sin fecha de vencimiento. Importa el reporte UCA para verificar TVU/TMR.":"✓ UCA · Los SKU con fechas verificables no presentan alertas de vencimiento o TVU/TMR.";
@@ -66,9 +72,18 @@ function render(){
  const kpi=(title,value,desc,color)=>'<div class="metric"><label>'+html(title)+'</label><div class="value '+color+'">'+nfmt(value)+'</div><small>'+html(desc)+'</small></div>';
  $u("ucaMetrics").innerHTML=kpi("Productos con stock",unique(inStock),"SKU con cantidad positiva","green")+kpi("Productos sin stock",unique(zero),"SKU con cantidad cero reportada","red")+kpi("Próximos / vencidos",unique(near),"SKU con fecha y ≤ "+daysWindow+" días","red")+kpi("Alertas críticas",unique(bad),"TMR, vencimiento o estadía","red")+kpi("Sin fecha de vencimiento",unique(unknown),"SKU con cumplimiento no verificable","blue");
  $u("ucaReference").textContent=referenceStatus;
- $u("ucaSource").textContent=state.uca?.rows?"Archivo UCA · "+state.uca.source+" · "+new Date(state.uca.updatedAt).toLocaleString("es-PE"):"Último conteo WMS por pasillo · "+latestPerAisle().size+"/8";
+ const archives=state.ucaHistory||[],picker=$u("ucaHistorySelect");
+ if(picker){
+  const opts=['<option value="current">Stock más reciente</option>'];
+  archives.forEach((v,i)=>opts.push('<option value="h'+i+'">'+html(v.updatedAt?.slice(0,10)||"Fecha")+' · '+html(v.source||"Carga UCA")+'</option>'));
+  picker.innerHTML=opts.join("");
+  if(![...picker.options].some(o=>o.value===selectedSnapshot))selectedSnapshot="current";
+  picker.value=selectedSnapshot;
+ }
+ const snap=currentSnapshot();
+ $u("ucaSource").textContent=snap?.rows?"Archivo UCA · "+snap.source+" · "+new Date(snap.updatedAt).toLocaleString("es-PE")+(selectedSnapshot!=="current"?" · histórico":""):"Último conteo WMS por pasillo · "+latestPerAisle().size+"/8";
  const notices=[];
- if(!state.uca?.rows)notices.push("Los conteos WMS no incluyen fecha de vencimiento. Para calcular alertas reales, importa un Excel UCA con SKU, Stock y Vencimiento.");
+ if(!currentSnapshot()?.rows)notices.push("Los conteos WMS no incluyen fecha de vencimiento. Para calcular alertas reales, importa un Excel UCA con SKU, Stock y Vencimiento.");
  if(!reference.size)notices.push("Para evaluar TVU/TMR, carga el archivo de reglas en «Importar TVU/TMR». Se guardará cifrado para las computadoras autorizadas.");
  if(bad.length)notices.push("⚠ "+unique(bad)+" SKU con alertas. Revisa los resultados y sus fechas antes de despachar.");
  if(unknown.length)notices.push(unique(unknown)+" SKU con stock no tienen fecha de vencimiento verificable.");
@@ -149,8 +164,8 @@ function extract(grids){
 async function importFile(file){
  let status=$u("ucaUploadStatus");status.textContent="Importando "+file.name+"…";
  try{let grids=/\.csv$/i.test(file.name)?csvRead(await file.text()):await xlsxRead(file);
- let x=extract(grids);if(state.uca?.rows?.length&&!confirm("Reemplazar el último stock UCA cargado (el histórico de conteos WMS no se borra)?"))return;
- state.uca={source:file.name,updatedAt:new Date().toISOString(),rows:x.rows};
+ let x=extract(grids);if(state.uca?.rows?.length&&!confirm("¿Guardar una nueva carga UCA y conservar la anterior en el historial?"))return;
+ if(state.uca?.rows?.length){state.ucaHistory=[...(state.ucaHistory||[]),state.uca]}selectedSnapshot="current";state.uca={source:file.name,updatedAt:new Date().toISOString(),rows:x.rows};
  let saved=await persist();if(!saved)throw Error("El navegador no pudo guardar el inventario.");
  status.textContent="✓ "+x.rows.length+" registros UCA guardados · "+x.discarded+" filas descartadas. Revisa sincronización en DATOS.";
  render();
@@ -159,6 +174,7 @@ async function importFile(file){
 function init(){
  if(!$u("ucaUpload"))return;
  $u("ucaUpload").onclick=()=>$u("ucaFile").click();
+ $u("ucaHistorySelect").onchange=e=>{selectedSnapshot=e.target.value;render()};
  $u("ucaRulesUpload").onclick=()=>$u("ucaRulesFile").click();
  $u("ucaRulesFile").onchange=async e=>{let f=e.target.files?.[0];if(!f)return;e.target.value="";if(window.inventoryCloudRole==="viewer")return alert("Modo consulta: no puedes cambiar reglas.");await importTVUTMR(f)};
  $u("ucaFile").onchange=async e=>{let file=e.target.files?.[0];if(!file)return;e.target.value="";if(window.inventoryCloudRole==="viewer")return alert("Modo consulta: no se pueden cargar inventarios.");await importFile(file)};
