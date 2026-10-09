@@ -102,6 +102,25 @@ body{background:var(--bg)!important}
 .shared-stamp[data-sync-state="error"]{background:#ffecea;color:#bb3f35}
 @media(max-width:1060px){.shared-stamp{max-width:180px}}
 </style>
+<style id="uca-3a-theme">
+.uca-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.uca-metrics .metric{border-top:3px solid #ff7a00}
+.uca-notices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:10px}
+.uca-notices p{background:#fff5eb;color:#8b4f14;border:1px solid #ffdfc0;border-radius:11px;padding:13px;font-size:11px;line-height:1.55;margin:0}
+.uca-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.uca-controls>input{width:245px;max-width:100%}.uca-controls>select{width:175px;max-width:100%}
+#view-uca table{width:100%;min-width:1040px}
+#view-uca table th,#view-uca table td{padding:12px 10px}
+#view-uca table td b{color:#1f43a8}#view-uca table td small{display:block;color:#76859b;margin-top:4px;max-width:240px}
+#view-uca .uca-tag{display:inline-block;border-radius:999px;padding:5px 8px;font-weight:750;font-size:10px;white-space:nowrap}
+#view-uca .uca-critical{background:#ffebeb;color:#c53841}
+#view-uca .uca-unknown{background:#fff0dd;color:#9c610c}
+#view-uca .uca-ok{background:#e5f6ed;color:#11734d}
+#view-uca .uca-none{background:#eff2f6;color:#637188}
+.uca-upload-status{margin-top:12px;font-size:11px;color:#617289}
+@media(max-width:1300px){.uca-metrics{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:780px){.uca-metrics{grid-template-columns:repeat(2,1fr)}.uca-notices{grid-template-columns:1fr}.uca-controls>input,.uca-controls>select{width:100%}}
+</style>
 </head>
 <body><div class="layout"><aside class="sidebar">
 <div class="brand"><div class="mark">▦</div><div><strong>Inventarios</strong><small>Centro de control</small></div></div>
@@ -111,6 +130,7 @@ body{background:var(--bg)!important}
 <button class="nav" data-view="calendar"><span>▦</span><span class="label">Calendario e historial</span></button>
 <button class="nav" data-view="detail"><span>≡</span><span class="label">Detalle de conteos</span></button>
 <button class="nav" data-view="actions"><span>✓</span><span class="label">Investigaciones</span></button>
+<button class="nav" data-view="uca"><span>◈</span><span class="label">UCA · Stock y vencimientos</span></button>
 <div class="nav-label">Configuración</div>
 <button class="nav" data-view="method"><span>ⓘ</span><span class="label">Metodología</span></button>
 <button class="nav" data-view="data"><span>☁</span><span class="label">DATOS</span></button>
@@ -124,6 +144,25 @@ body{background:var(--bg)!important}
 <section class="view" id="view-detail"><div class="title-row"><div><span class="tag blue">Auditoría de conteos</span><h1 style="margin-top:10px">Detalle físico vs. sistemático</h1><p class="subtitle">Revisa el conteo de un día específico, con filtros por SKU y diferencias.</p></div><button class="btn" id="exportDetail">↓ Descargar detalle CSV</button></div><div class="panel"><div class="filter-row"><div class="field wide"><label>Sesión / fecha / pasillo</label><select id="detailSession"></select></div><div class="field wide"><label>Buscar SKU, producto o ubicación</label><input id="detailSearch" placeholder="Escribe para filtrar..."></div><div class="field"><label>Estado</label><select id="detailStatus"><option value="all">Todos</option><option value="diff">Con diferencias</option><option value="missing">Faltantes</option><option value="surplus">Sobrantes</option><option value="ok">Correctos</option></select></div></div><div id="detailStats" class="inline-stats"></div><div class="table-wrap"><table><thead><tr><th>Ubicación</th><th>SKU / producto</th><th>Zona</th><th>WMS</th><th>Físico</th><th>Variación</th><th>Dif. S/</th><th>Capturador</th></tr></thead><tbody id="detailTable"></tbody></table></div><div class="chips" style="justify-content:space-between;margin-top:12px"><span id="detailPager" class="smallprint"></span><div class="chips"><button class="btn tiny" id="prevDetail">‹ Anterior</button><button class="btn tiny" id="nextDetail">Siguiente ›</button></div></div></div></section>
 <section class="view" id="view-actions"><div class="title-row"><div><span class="tag blue">Mejora continua</span><h1 style="margin-top:10px">Investigación de diferencias</h1><p class="subtitle">Registra causas, responsables, planes de acción y cierre de incidencias.</p></div><button class="btn" id="exportActions">↓ Acciones CSV</button></div><div class="hint">Los casos se vinculan a la sesión original para conservar la trazabilidad aun cuando se vuelva a contar el pasillo.</div><div class="metrics" id="actionMetrics" style="grid-template-columns:repeat(4,minmax(0,1fr))"></div><div class="panel"><div class="filter-row"><div class="field wide"><label>Filtrar incidencias</label><input id="actionSearch" placeholder="SKU, producto, ubicación, causa..."></div><div class="field"><label>Estado</label><select id="actionStatus"><option value="all">Todos</option><option value="Pendiente">Pendiente</option><option value="En análisis">En análisis</option><option value="Cerrado">Cerrado</option></select></div></div><div class="table-wrap"><table><thead><tr><th>Fecha / pasillo</th><th>Ubicación / producto</th><th>Diferencia</th><th>Causa raíz</th><th>Responsable</th><th>Estado</th><th>Gestionar</th></tr></thead><tbody id="actionTable"></tbody></table></div></div></section>
 <section class="view" id="view-method"><div class="title-row"><div><span class="tag blue">Metodología</span><h1 style="margin-top:10px">Reglas de medición</h1><p class="subtitle">Criterios claros para que el global sea defendible ante jefatura.</p></div></div><div class="grid22"><div class="panel"><h2>ERI · Exactitud de registros</h2><p class="subtext" style="margin-top:12px">Líneas SKU-ubicación donde físico y WMS coinciden, divididas entre todas las líneas medidas con conteo válido.</p><div class="hint" style="margin-top:14px">ERI = Líneas sin diferencia ÷ líneas medidas × 100</div><p>No es un promedio simple de porcentajes por pasillo. El global suma líneas correctas y líneas medidas.</p></div><div class="panel"><h2>ERU · Exactitud de unidades</h2><p class="subtext" style="margin-top:12px">Suma diferencias absolutas de unidades de cada línea, compara contra todas las unidades sistemáticas del ciclo.</p><div class="hint" style="margin-top:14px">ERU = (1 − Σ |Físico − WMS| ÷ Σ WMS) × 100</div><p>Si el denominador del WMS es cero, el indicador se presenta como N/D. Se advierten resultados negativos no truncados cuando las diferencias superan el stock base.</p></div><div class="panel"><h2>Regla por pasillo y ciclo</h2><p style="margin-top:12px">Un ciclo agrupa hasta ocho pasillos. Puedes contar el mismo pasillo diferentes días; todas sus sesiones quedan guardadas, pero solo la más reciente cuenta para el consolidado de ese ciclo. Las sesiones antiguas se etiquetan como históricas.</p></div><div class="panel"><h2>Seguridad y permanencia</h2><p style="margin-top:12px">Los datos se guardan localmente mediante IndexedDB (con respaldo alternativo en almacenamiento local). No sincroniza otros equipos ni almacena datos en una nube. Exporta respaldos JSON frecuentes y restáuralos si cambias de equipo o navegador. Evita el modo incógnito.</p><div class="chips" style="margin-top:15px"><button class="btn" id="restoreBtn">↑ Restaurar respaldo</button><button class="btn" id="backupBtn2">↓ Crear respaldo JSON</button></div></div></div></section>
+<section class="view" id="view-uca">
+ <div class="title-row"><div><span class="tag blue">Almacén · UCA</span><h1>UCA · Control de stock y vencimientos</h1><p class="subtitle">Cruce de existencias con reglas TVU, TMR CEDI, TMR tienda y tiempo máximo de almacenamiento. Las alertas se generan solo cuando existen fechas verificables.</p></div></div>
+ <div class="panel" style="border-top:3px solid #ff7a00;margin-bottom:15px">
+ <div class="row" style="display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap">
+ <div><strong id="ucaReference" style="color:#2145a3">Cargando TVU / TMR…</strong><p id="ucaSource" style="margin-top:5px">Preparando inventario UCA…</p></div>
+ <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="ucaUpload">＋ Cargar inventario UCA</button><button class="btn" id="ucaExport">↓ Exportar alertas</button><input type="file" id="ucaFile" accept=".xlsx,.csv" hidden></div>
+ </div>
+ <div class="uca-upload-status" id="ucaUploadStatus">Puedes cargar un Excel UCA con SKU, stock, vencimiento, ingreso y ubicación; se guardará junto a la ronda actual para compartirlo desde DATOS.</div>
+ </div>
+ <div class="uca-metrics" id="ucaMetrics"></div>
+ <div id="ucaNotice" class="uca-notices"></div>
+ <div class="panel" style="margin-top:14px"><div class="panel-head" style="align-items:center"><div><h3>Inventario UCA · Detalle por SKU y alertas</h3><p id="ucaCount">Sin datos cargados</p></div><div class="uca-controls">
+ <input id="ucaSearch" placeholder="Buscar SKU, producto o alerta…" aria-label="Buscar SKU">
+ <select id="ucaFilter" aria-label="Filtro UCA"><option value="all">Todos los productos</option><option value="stock">Con stock</option><option value="none">Sin stock</option><option value="near">Próximos a vencer</option><option value="alert">Incumplen TVU/TMR</option><option value="unknown">Sin fecha / por validar</option></select>
+ <label for="ucaDays" style="display:flex;align-items:center;gap:5px;margin:0">Alerta en <input type="number" id="ucaDays" min="1" max="90" value="20" style="width:67px"> días</label>
+ </div></div>
+ <div class="table-wrap" style="overflow:auto"><table><thead><tr><th>SKU / Producto</th><th>Stock</th><th>Pasillo</th><th>Vencimiento</th><th>Días</th><th>TMR CEDI</th><th>Estado</th><th>Alerta / incumplimiento</th></tr></thead><tbody id="ucaTable"><tr><td colspan="8">Cargando…</td></tr></tbody></table></div>
+ <p id="ucaLimit" style="margin-top:11px"></p></div>
+ </section>
 <section class="view" id="view-data">
  <div class="title-row"><div><span class="tag blue">Configuración</span><h1 style="margin-top:10px">Datos y sincronización</h1><p class="subtitle">Conecta los inventarios compartidos mediante Google Sheets y comprueba cuándo se publicó la última carga.</p></div></div>
  <div class="panel data-panel">
@@ -235,7 +274,7 @@ function gm(){return calc(rowsOf(effective()))}
 function metric(name,val,sub,tone='',small=false){return `<div class="metric"><label>${esc(name)}</label><div class="value ${tone} ${small?'sm':''}">${val}</div><small>${esc(sub)}</small></div>`}
 function selectedView(view){currentView=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));$$('.nav').forEach(v=>v.classList.toggle('active',v.dataset.view===view));renderView();window.scrollTo(0,0)}
 function render(){let options=state.cycles.map(c=>`<option value="${esc(c.id)}" ${c.id===currentCycle?'selected':''}>${esc(c.name)}</option>`).join('');$('#cycleSelector').innerHTML=options;renderView()}
-function renderView(){if(currentView==='overview')overview();if(currentView==='aisles')aisles();if(currentView==='calendar')history();if(currentView==='detail')detail();if(currentView==='actions')actions();}
+function renderView(){if(currentView==='overview')overview();if(currentView==='aisles')aisles();if(currentView==='calendar')history();if(currentView==='detail')detail();if(currentView==='actions')actions();if(currentView==='uca'&&window.renderUCA)window.renderUCA();}
 function overview(){let latest=latestPerAisle(),n=latest.size,m=gm(),all=cycleSessions(),cycleName=cycle().name;$('#overviewSubtitle').textContent=`${cycleName} · Seguimiento diario y consolidación de inventarios por pasillo.`;
 $('#cycleHero').innerHTML=`<div><div class="kicker">${n===8?'Ciclo con cobertura completa':'Consolidado parcial · inventario en proceso'}</div><h2>${n===8?'Los 8 pasillos ya tienen inventario':'Avanzando hacia el cierre de los 8 pasillos'}</h2><p>${n===8?'El consolidado reúne la última sesión de cada pasillo.':'Los indicadores mostrados representan exclusivamente los pasillos que ya tienen un conteo cargado.'} Si repites un pasillo, su última sesión reemplaza a la anterior solo para el resultado global, manteniendo el historial.</p></div><div class="hero-right"><strong>${n}<span style="opacity:.45">/8</span></strong><br><small>Pasillos cubiertos · ${all.length} ${all.length===1?'sesión':'sesiones'}</small><div class="progress"><span style="width:${100*n/8}%"></span></div></div>`;
 $('#cycleMetrics').innerHTML=metric('ERI · Global '+(n<8?'parcial':''),per(m.eri),`${fmt.format(m.correct)} / ${fmt.format(m.count)} líneas correctas`,m.eri!==null&&m.eri<.98?'red':'green')+metric('ERU · Global '+(n<8?'parcial':''),per(m.eru),'Exactitud ponderada de unidades',m.eru!==null&&m.eru<.99?'red':'green')+metric('Pasillos completados',`${n} / 8`,`${all.length} ${all.length===1?'sesión':'sesiones'} registradas`,'blue')+metric('Líneas con diferencia',fmt.format(m.errors),`${fmt.format(m.count)} líneas consolidadas`,m.errors?'red':'green')+metric('Unidades · Diferencia',`${m.net>0?'+':''}${fmt.format(m.net)}`,`${fmt.format(m.absUnit)} unid. de desviación absoluta`,m.net<0?'red':'')+metric('Valor absoluto de diferencias',pen.format(m.valAbs),'Solo líneas con costo unitario', '',true);
@@ -310,4 +349,5 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 
 <script src="./sheets-sync.js?v=revision-20261009-lectura"></script>
+<script src="./uca-module.js?v=1"></script>
 </body></html>
