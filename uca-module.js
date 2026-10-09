@@ -96,7 +96,7 @@ function refreshRuleState(){
 function getRecords(){refreshRuleState();return stockRows().map(evaluate)}
 function renderHome(){
  const box=$u("ucaHomeAlerts");if(!box)return;
- const keep=selectedSnapshot;selectedSnapshot="current";const all=getRecords();selectedSnapshot=keep;const stock=all.filter(x=>x.stock>0);
+ const keep=selectedSnapshot;selectedSnapshot="current";const all=getRecords();selectedSnapshot=keep;const stock=all.filter(x=>stockKind(x)==="stock");
  if(!stock.length){box.style.display="none";return}
  const bad=stock.filter(x=>x.status==="critical"),unknown=stock.filter(x=>x.left===null);
  const content=bad.length?"⚠ UCA · "+bad.length+" SKU con incumplimientos TVU/TMR o vencimiento. Revisa los casos.":unknown.length?"◈ UCA · "+unknown.length+" SKU con stock sin fecha de vencimiento. Importa el reporte UCA para verificar TVU/TMR.":"✓ UCA · Los SKU con fechas verificables no presentan alertas de vencimiento o TVU/TMR.";
@@ -105,10 +105,11 @@ function renderHome(){
 }
 window.renderUCAHome=renderHome;
 function render(){
- let records=getRecords(),inStock=records.filter(r=>r.stock>0),zero=records.filter(r=>r.stock<=0),bad=inStock.filter(r=>r.status==="critical"),near=inStock.filter(r=>r.left!==null&&r.left<=daysWindow),unknown=inStock.filter(r=>r.left===null);
+ let records=getRecords(),summary=stockSummary(records),inStock=records.filter(r=>stockKind(r)==="stock"),zero=records.filter(r=>stockKind(r)==="none"),bad=inStock.filter(r=>r.status==="critical"),near=inStock.filter(r=>r.left!==null&&r.left<=daysWindow),unknown=inStock.filter(r=>r.left===null);
  const unique=records=>new Set(records.map(r=>r.sku)).size;
  const kpi=(title,value,desc,color)=>'<div class="metric"><label>'+html(title)+'</label><div class="value '+color+'">'+nfmt(value)+'</div><small>'+html(desc)+'</small></div>';
- $u("ucaMetrics").innerHTML=kpi("Productos con stock",unique(inStock),"SKU con cantidad positiva","green")+kpi("Productos sin stock",unique(zero),"SKU con cantidad cero reportada","red")+kpi("Próximos / vencidos",unique(near),"SKU con fecha y ≤ "+daysWindow+" días","red")+kpi("Alertas críticas",unique(bad),"TMR, vencimiento o estadía","red")+kpi("Sin fecha de vencimiento",unique(unknown),"SKU con cumplimiento no verificable","blue");
+ $u("ucaMetrics").innerHTML=kpi("Productos con stock",summary.stocked,"Al menos K o L mayor a cero","green")+kpi("Productos sin stock",summary.empty,"K = 0 y L = 0 en todas sus filas","red")+kpi("Próximos / vencidos",unique(near),"SKU con fecha y ≤ "+daysWindow+" días","red")+kpi("Alertas críticas",unique(bad),"TMR, vencimiento o estadía","red")+kpi("Sin fecha de vencimiento",unique(unknown),"SKU con cumplimiento no verificable","blue");
+ renderStockChart(summary);
  $u("ucaReference").textContent=referenceStatus;
  const archives=state.ucaHistory||[],picker=$u("ucaHistorySelect");
  if(picker){
@@ -125,15 +126,15 @@ function render(){
  if(!reference.size)notices.push("Para evaluar TVU/TMR, carga el archivo de reglas en «Importar TVU/TMR». Se guardará cifrado para las computadoras autorizadas.");
  if(bad.length)notices.push("⚠ "+unique(bad)+" SKU con alertas. Revisa los resultados y sus fechas antes de despachar.");
  if(unknown.length)notices.push(unique(unknown)+" SKU con stock no tienen fecha de vencimiento verificable.");
- notices.push("La ausencia de un SKU en los archivos no equivale a stock cero. Solo se clasifica «Sin stock» cuando se reporta cantidad 0.");
+ notices.push("Regla exacta: Sin stock = K y L ambas iguales a 0 en todas las filas del SKU. Celdas vacías o datos no numéricos se muestran Por validar. Para el gráfico, se excluyen del porcentaje los SKU por validar.");
  $u("ucaNotice").innerHTML=notices.map(t=>'<p>'+html(t)+'</p>').join("");
- let r=records.filter(x=>(filter==="all"||filter==="stock"&&x.stock>0||filter==="none"&&x.stock<=0||filter==="near"&&x.stock>0&&x.left!==null&&x.left<=daysWindow||filter==="alert"&&x.status==="critical"||filter==="unknown"&&x.status==="unknown")&&(!query||[x.sku,x.product,x.category,x.aisle,...x.alerts].some(t=>normalize(t).includes(query))));
+ let r=records.filter(x=>(filter==="all"||filter==="stock"&&stockKind(x)==="stock"||filter==="none"&&stockKind(x)==="none"||filter==="near"&&stockKind(x)==="stock"&&x.left!==null&&x.left<=daysWindow||filter==="alert"&&x.status==="critical"||filter==="unknown"&&x.status==="unknown")&&(!query||[x.sku,x.product,x.category,x.aisle,...x.alerts].some(t=>normalize(t).includes(query))));
  let priority={critical:0,unknown:1,ok:2,none:3};
  r.sort((a,b)=>priority[a.status]-priority[b.status]||(a.left??999999)-(b.left??999999));
  $u("ucaCount").textContent=r.length+" registros";
  $u("ucaTable").innerHTML=r.slice(0,500).map(x=>{
    let label={none:"Sin stock",critical:"Alerta",unknown:"Por validar",ok:"Conforme"}[x.status];
-   return '<tr><td><b>'+html(x.sku)+'</b><small>'+html(x.product||x.rule?.name||"Nombre no informado")+'</small></td><td class="num">'+nfmt(x.stock)+'</td><td>'+html(x.aisle||x.location||"—")+'</td><td>'+html(x.expiry||"Sin fecha")+'</td><td class="num">'+(x.left===null?"—":x.left+" d")+'</td><td class="num">'+(x.rule?.tvu??"N/A")+'</td><td class="num">'+(x.rule?.tmr??"N/A")+'</td><td class="num">'+(x.rule?.store??"N/A")+'</td><td class="num">'+(x.rule?.max??"N/A")+'</td><td><span class="uca-tag uca-'+x.status+'">'+label+'</span></td><td>'+html(x.alerts.join(" · ")||"—")+'</td></tr>'
+   return '<tr><td><b>'+html(x.sku)+'</b><small>'+html(x.product||x.rule?.name||"Nombre no informado")+'</small></td><td class="num">'+(qty(x.stockK)===null?"—":nfmt(x.stockK))+' / '+(qty(x.stockL)===null?"—":nfmt(x.stockL))+'</td><td>'+html(x.aisle||x.location||"—")+'</td><td>'+html(x.expiry||"Sin fecha")+'</td><td class="num">'+(x.left===null?"—":x.left+" d")+'</td><td class="num">'+(x.rule?.tvu??"N/A")+'</td><td class="num">'+(x.rule?.tmr??"N/A")+'</td><td class="num">'+(x.rule?.store??"N/A")+'</td><td class="num">'+(x.rule?.max??"N/A")+'</td><td><span class="uca-tag uca-'+x.status+'">'+label+'</span></td><td>'+html(x.alerts.join(" · ")||"—")+'</td></tr>'
  }).join("")||'<tr><td colspan="11" class="empty">No hay datos para este filtro. Carga un inventario UCA.</td></tr>';
  $u("ucaLimit").textContent=r.length>500?"Mostrando 500 filas: utiliza filtros o exportación para consultar todas.":"";
  renderHome();
@@ -219,7 +220,7 @@ function init(){
  $u("ucaSearch").oninput=e=>{query=normalize(e.target.value);render()};
  $u("ucaFilter").onchange=e=>{filter=e.target.value;render()};
  $u("ucaDays").onchange=e=>{daysWindow=Math.max(1,Math.min(90,Number(e.target.value)||20));e.target.value=daysWindow;render()};
- $u("ucaExport").onclick=()=>{let rows=getRecords().map(x=>({SKU:x.sku,Producto:x.product,Stock:x.stock,Pasillo:x.aisle,Vencimiento:x.expiry,Dias_para_vencer:x.left??"",TMR_CEDI:x.rule?.tmr??"",TMR_Tienda:x.rule?.store??"",Estado:x.status,Alertas:x.alerts.join(" | ")}));if(rows.length)download("UCA_TVU_TMR_"+new Date().toISOString().slice(0,10)+".csv",csv(rows));else alert("No hay registros UCA para exportar")};
+ $u("ucaExport").onclick=()=>{let rows=getRecords().map(x=>({SKU:x.sku,Producto:x.product,Stock_K:x.stockK??"",Stock_L:x.stockL??"",Estado_stock:stockKind(x),Pasillo:x.aisle,Vencimiento:x.expiry,Dias_para_vencer:x.left??"",TMR_CEDI:x.rule?.tmr??"",TMR_Tienda:x.rule?.store??"",Estado:x.status,Alertas:x.alerts.join(" | ")}));if(rows.length)download("UCA_TVU_TMR_"+new Date().toISOString().slice(0,10)+".csv",csv(rows));else alert("No hay registros UCA para exportar")};
  rules();
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
