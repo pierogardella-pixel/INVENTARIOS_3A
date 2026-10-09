@@ -10,7 +10,7 @@ const nfmt=n=>Number(n||0).toLocaleString("es-PE",{maximumFractionDigits:0});
 const dateToIso=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
 function dateValue(v){
  if(v==null||v==="")return "";
- if(typeof v==="number"){return v>=30000&&v<100000?dateToIso(new Date(Date.UTC(1899,11,30)+Math.trunc(v)*86400000)):""}
+ if(typeof v==="number"){return v>=30000&&v<100000?new Date(Date.UTC(1899,11,30)+Math.trunc(v)*86400000).toISOString().slice(0,10):""}
  const t=String(v).trim(),m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/),d=t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
  if(m){let x=new Date(+m[1],+m[2]-1,+m[3]);return x.getFullYear()===+m[1]&&x.getMonth()===+m[2]-1&&x.getDate()===+m[3]?dateToIso(x):""}
  if(d){let y=+d[3];if(y<100)y+=2000;let x=new Date(y,+d[2]-1,+d[1]);return x.getFullYear()===y&&x.getMonth()===+d[2]-1&&x.getDate()===+d[1]?dateToIso(x):""}
