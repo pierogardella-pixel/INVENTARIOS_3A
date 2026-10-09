@@ -96,10 +96,10 @@ function referenceExcel(grids){
  if(indexSku<0||indexTVU<0||indexTMR<0)throw Error("El archivo debe incluir SKU, TVU y TMR.");
  const numberOrNull=v=>v!==""&&v!=null&&Number.isFinite(Number(v))?Number(v):null;
  let exceptions=new Map();
- for(let r of grid){let id=r?.[12];if(id!=null&&/^\\d{5,}$/.test(String(id).trim()))exceptions.set(skuValue(id),[numberOrNull(r[14])??r[14],numberOrNull(r[15])??r[15]])}
+ for(let r of grid){let id=r?.[12];if(id!=null&&/^\d{5,}$/.test(String(id).trim()))exceptions.set(skuValue(id),[numberOrNull(r[14])??r[14],numberOrNull(r[15])??r[15]])}
  let output=[];
  for(let r of grid.slice(headerIndex+1)){
-  let sku=skuValue(r?.[indexSku]);if(!/^\\d{5,}$/.test(sku))continue;
+  let sku=skuValue(r?.[indexSku]);if(!/^\d{5,}$/.test(sku))continue;
   output.push([sku,String(r?.[column("Nombre")]||""),String(r?.[column("Categoría")]||""),numberOrNull(r[indexTVU]),numberOrNull(r[indexTMR]),numberOrNull(r[column("TMR TIENDA")]),numberOrNull(r[column("DIAS MAX ALMACEN")]),String(r?.[column("Activo / Inactivo")]||""),exceptions.get(sku)||null])
  }
  if(output.length<50)throw Error("Solo se reconocieron "+output.length+" SKU. Comprueba que sea el Excel TVU/TMR correcto.");
