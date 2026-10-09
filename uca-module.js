@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const $u=id=>document.getElementById(id);
-let reference=new Map(),referenceStatus="Sin reglas cargadas · Importa TVU/TMR",lastRuleState=null,filter="all",query="",daysWindow=20,selectedSnapshot="current",aisleType="ACTIVO",aisleZone="SECOS_FOOD";
+let reference=new Map(),referenceStatus="Sin reglas cargadas · Importa TVU/TMR",lastRuleState=null,filter="all",query="",daysWindow=20,selectedSnapshot="current",aisleType="ALL",aisleZone="ALL";
 const html=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const normalize=s=>String(s??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const skuValue=s=>String(s??"").trim().replace(/\.0+$/,"");
@@ -95,54 +95,93 @@ function matchedStorage(type,choice){
  if(choice==="SOLO_RESERVAS")return type==="RESERVA"||type==="RESERVA_PISO";
  return type===choice;
 }
+
+/* Capacidades UCA proporcionadas para los tipos de ubicación del almacén.
+ * Son globales por pasillo/tipo (no se divide la capacidad por FOOD/NONFOOD).
+ * Para filtros de una sola zona, el indicador muestra qué parte de la capacidad
+ * total corresponde a ubicaciones ocupadas por esa zona. */
+const UCA_CAPACITIES={
+ ACTIVO:{"01":104,"02":104,"03":104,"04":104,"05":60,"06":60,"07":60,"08":60},
+ RESERVA:{"01":416,"02":416,"03":416,"04":416},
+ RESERVA_PISO:{"09":66,"10":52,"11":52,"12":26}
+};
+function visibleAisles(type){
+ const act=Object.keys(UCA_CAPACITIES.ACTIVO),res=Object.keys(UCA_CAPACITIES.RESERVA),floor=Object.keys(UCA_CAPACITIES.RESERVA_PISO);
+ if(type==="ACTIVO")return act;
+ if(type==="RESERVA")return res;
+ if(type==="RESERVA_PISO")return floor;
+ if(type==="SOLO_RESERVAS")return [...res,...floor];
+ return [...act,...floor];
+}
+function capacityFor(aisle,type){
+ const kinds=type==="ALL"?["ACTIVO","RESERVA","RESERVA_PISO"]:
+   type==="SOLO_RESERVAS"?["RESERVA","RESERVA_PISO"]:[type];
+ let total=0;
+ for(const t of kinds)total+=UCA_CAPACITIES[t]?.[aisle]||0;
+ return total||null;
+}
 function aisleStats(rows,type=aisleType,zone=aisleZone){
- const result=new Map();
- let inferred=0,unknownType=0,otherZones=0;
- // Las barras representan ubicaciones ocupadas únicas por pasillo, no bultos.
- // El porcentaje es la participación de cada pasillo en las ubicaciones
- // filtradas; no implica porcentaje de capacidad de rack.
+ const group=new Map(visibleAisles(type).map(a=>[a,{aisle:a,locations:new Set(),skus:new Set(),units:0,capacity:capacityFor(a,type)}]));
+ let inferred=0,ignored=0;
  for(const r of rows){
-  const real=storageType(r),aisle=aisleLabel(r),z=stockZone(r);
-  if(!real){unknownType++;continue}
-  if(!matchedStorage(real,type)||!aisle)continue;
-  if(!result.has(aisle))result.set(aisle,{aisle,locations:new Set(),sku:new Set(),units:0,category:real});
-  if(z!==zone){otherZones++;continue}
-  const qtyVal=qty(r.stock);
-  if(qtyVal===null||qtyVal<=0)continue;
-  const location=String(r.location||"").trim().toUpperCase();
-  if(!location)continue;
-  const d=result.get(aisle);
-  d.locations.add(location);
-  d.sku.add(skuValue(r.sku));
-  d.units+=qtyVal;
+  const a=aisleLabel(r),t=storageType(r),z=stockZone(r);
+  if(!a||!t||!group.has(a)){ignored++;continue}
+  if(type!=="ALL"&&!matchedStorage(t,type))continue;
+  if(zone!=="ALL"&&z!==zone)continue;
+  const amount=qty(r.stock),loc=String(r.location||"").trim().toUpperCase();
+  if(amount===null||amount<=0||!loc)continue;
+  const entry=group.get(a);
+  entry.locations.add(loc);
+  entry.skus.add(skuValue(r.sku));
+  entry.units+=amount;
   if(!r.storageType&&!r.locationType&&!r.type)inferred++;
  }
- const items=[...result.values()].sort((a,b)=>Number(a.aisle)-Number(b.aisle));
- const total=items.reduce((n,a)=>n+a.locations.size,0);
- return {rows:items.map(a=>({aisle:a.aisle,locations:a.locations.size,sku:a.sku.size,units:a.units,pct:total?100*a.locations.size/total:0})),total,inferred,unknownType,otherZones};
+ const results=[...group.values()].map(x=>({
+  aisle:x.aisle,locations:x.locations.size,sku:x.skus.size,units:x.units,
+  capacity:x.capacity,pct:x.capacity?100*x.locations.size/x.capacity:null
+ }));
+ const used=results.reduce((v,r)=>v+r.locations,0);
+ const totalCapacity=results.reduce((v,r)=>v+(r.capacity||0),0);
+ const free=results.reduce((v,r)=>v+Math.max(0,(r.capacity||0)-r.locations),0);
+ const risk=results.filter(r=>r.pct!==null&&r.pct>=85).length;
+ const highRisk=results.filter(r=>r.pct!==null&&r.pct>=92).length;
+ return {rows:results,used,totalCapacity,free,risk,highRisk,fill:totalCapacity?100*used/totalCapacity:null,inferred,ignored};
 }
 function renderAisleChart(){
- const target=$u("ucaAisleBars"),note=$u("ucaAisleInfo"),count=$u("ucaAisleCount");
- if(!target)return;
- const s=aisleStats(stockRows());
- if(count)count.textContent=nfmt(s.total)+" ubicaciones · "+s.rows.length+" pasillos";
- if(!s.total){
-  target.innerHTML='<div class="uca-aisle-empty">Sin ubicaciones para estos filtros. Comprueba que el Excel contenga <strong>TIPO, ZONA, PASILLO, UBICACIÓN y CANTIDAD</strong>. Si cargaste una versión anterior, vuelve a importar el mismo archivo UCA para actualizar estos campos.</div>';
- }else{
-  target.innerHTML=s.rows.map(r=>{
-   const pct=r.pct.toLocaleString("es-PE",{minimumFractionDigits:1,maximumFractionDigits:1});
-   const width=Math.max(0,Math.min(100,r.pct)).toFixed(3);
-   return '<div class="uca-aisle-row" title="Pasillo '+r.aisle+': '+nfmt(r.locations)+' ubicaciones · '+nfmt(r.sku)+' SKU · '+nfmt(r.units)+' bultos">'
-    +'<span class="uca-aisle-label">Pasillo '+r.aisle+'</span>'
-    +'<div class="uca-aisle-bar"><span class="uca-aisle-bar-fill" style="width:'+width+'%"></span></div>'
-    +'<strong class="uca-aisle-pct">'+pct+'%</strong>'
-    +'<small class="uca-aisle-meta">'+nfmt(r.locations)+' UBI · '+nfmt(r.sku)+' SKU</small></div>';
-  }).join("");
+ const chart=$u("ucaAisleBars"),info=$u("ucaAisleInfo"),summary=$u("ucaAisleCount"),kpis=$u("ucaOccupancyMetrics");
+ if(!chart)return;
+ const result=aisleStats(stockRows()),pct=v=>v===null?"—":v.toLocaleString("es-PE",{minimumFractionDigits:1,maximumFractionDigits:1})+"%";
+ const stat=(name,value,detail,cls)=>'<div class="uca-occupancy-card '+cls+'"><span>'+name+'</span><strong>'+value+'</strong><small>'+detail+'</small></div>';
+ if(kpis)kpis.innerHTML=
+   stat("UBICACIONES LLENAS",nfmt(result.used),"Ubicaciones únicas ocupadas","orange")+
+   stat("UBICACIONES VACÍAS",nfmt(result.free),"De "+nfmt(result.totalCapacity)+" espacios máximos","blue")+
+   stat("FILL RATE FILTRADO",pct(result.fill),"Ocupadas ÷ capacidad nominal","cyan")+
+   stat("PASILLOS EN ALERTA",nfmt(result.risk),"85% o más · "+result.highRisk+" alto riesgo","red");
+ if(summary)summary.textContent=nfmt(result.used)+" ubicaciones ocupadas de "+nfmt(result.totalCapacity)+" · "+result.rows.length+" pasillos";
+ chart.innerHTML=result.rows.map(r=>{
+  const fill=r.pct!==null?Math.max(0,Math.min(100,r.pct)):0;
+  const danger=r.pct!==null&&r.pct>=92;
+  const warning=!danger&&r.pct!==null&&r.pct>=85;
+  const cls=danger?"red":warning?"orange":"blue",alert=danger?"ALTO RIESGO":warning?"ALERTA":"";
+  const displayPct=pct(r.pct);
+  const tooltip="Pasillo "+r.aisle+" · "+nfmt(r.locations)+" UBI ocupadas / "+(r.capacity===null?"capacidad sin configurar":nfmt(r.capacity)+" máximas")+" · "+nfmt(r.sku)+" SKU · "+nfmt(r.units)+" bultos";
+  return '<div class="uca-vertical-item" title="'+tooltip+'">'
+   +'<div class="uca-vertical-badge '+(danger?"danger":warning?"warning":"clear")+'">'+(alert||"")+'</div>'
+   +'<strong class="uca-vertical-pct">'+displayPct+'</strong>'
+   +'<div class="uca-vertical-track" role="meter" aria-label="Pasillo '+r.aisle+'" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+fill.toFixed(1)+'">'
+   +'<span class="uca-vertical-fill '+cls+'" style="height:'+fill.toFixed(3)+'%"></span></div>'
+   +'<strong class="uca-vertical-label">Pasillo '+r.aisle+'</strong>'
+   +'<small class="uca-vertical-detail">'+nfmt(r.locations)+' / '+(r.capacity===null?"—":nfmt(r.capacity))+' UBI</small></div>';
+ }).join("");
+ if(info){
+  const typeLabel=aisleType==="ALL"?"Todos los tipos":aisleType==="SOLO_RESERVAS"?"Reserva + Reserva_Piso":aisleType;
+  const zoneLabel=aisleZone==="ALL"?"Todas las zonas":aisleZone.replace("_","-");
+  info.textContent="TIPO: "+typeLabel+" · ZONA: "+zoneLabel+". Fill rate = ubicaciones únicas llenas ÷ capacidad nominal del pasillo. "
+   +(aisleZone==="ALL"?"":"La zona filtra solo las ubicaciones ocupadas; la capacidad máxima corresponde al pasillo completo. ")
+   +"Umbrales: azul <85%, naranja 85–91,9%, rojo ≥92%. "
+   +(result.inferred?nfmt(result.inferred)+" registros con tipo inferido por ubicación. ":"")
+   +"Capacidades de referencia: Activo 01–04=104 y 05–08=60; Reserva 01–04=416; Reserva_Piso 09=66, 10=52, 11=52 y 12=26.";
  }
- const tp=aisleType==="SOLO_RESERVAS"?"RESERVA + RESERVA_PISO":aisleType;
- note.textContent="TIPO: "+tp+" · ZONA: "+aisleZone.replace("_","-")
-  +" · Porcentaje = ubicaciones únicas ocupadas del pasillo ÷ "+nfmt(s.total)+" ubicaciones únicas ocupadas del filtro."
-  +(s.inferred?" "+nfmt(s.inferred)+" filas con tipo inferido de ubicación; importa de nuevo para validar TIPO.":"");
 }
 
 function evaluate(r){
