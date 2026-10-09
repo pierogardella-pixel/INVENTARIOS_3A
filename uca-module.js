@@ -29,9 +29,46 @@ function stockRows(){
  for(const r of rowsOf(effective())){if(!r.sku)continue;let k=skuValue(r.sku),v=map.get(k)||{sku:k,product:r.product||"",category:r.category||"",stock:0,expiry:"",received:"",aisle:r.aisle,location:r.location};v.stock+=Math.max(0,Number(r.system)||0);map.set(k,v)}
  return [...map.values()]
 }
+function qty(v){
+ if(v===undefined||v===null||String(v).trim()==="")return null;
+ const n=Number(String(v).trim().replace(/\s/g,"").replace(",","."));
+ return Number.isFinite(n)&&n>=0?n:null;
+}
+// "Sin stock" se confirma solo con K = 0 Y L = 0.
+// Los campos vacíos no se convierten artificialmente en cero.
+function stockKind(r){
+ const k=qty(r.stockK),l=qty(r.stockL);
+ if((k!==null&&k>0)||(l!==null&&l>0))return "stock";
+ if(k===0&&l===0)return "none";
+ return "unverified";
+}
+function stockSummary(rows){
+ const groups=new Map();
+ for(const r of rows){
+  const k=String(r.sku||"").trim();if(!k)continue;
+  if(!groups.has(k))groups.set(k,[]);
+  groups.get(k).push(r);
+ }
+ let stocked=0,empty=0,unknown=0;
+ for(const rr of groups.values()){
+  const kinds=rr.map(stockKind);
+  if(kinds.includes("stock"))stocked++;
+  else if(kinds.every(k=>k==="none"))empty++;
+  else unknown++;
+ }
+ const validated=stocked+empty,total=validated+unknown;
+ return {stocked,empty,unknown,validated,total,pStock:validated?100*stocked/validated:0,pEmpty:validated?100*empty/validated:0};
+}
+function renderStockChart(stats){
+ const panel=$u("ucaStockBars"),descr=$u("ucaStockChartInfo");
+ if(!panel)return;
+ const bars=[{name:"Con stock",count:stats.stocked,pct:stats.pStock,tone:"blue"},{name:"Sin stock",count:stats.empty,pct:stats.pEmpty,tone:"orange"}];
+ panel.innerHTML=bars.map(b=>'<div class="uca-bar-item"><div class="uca-bar-top"><strong>'+b.name+'</strong><span>'+nfmt(b.count)+' SKU · '+b.pct.toLocaleString("es-PE",{minimumFractionDigits:1,maximumFractionDigits:1})+'%</span></div><div class="uca-bar-track" role="progressbar" aria-label="'+b.name+'" aria-valuenow="'+b.pct.toFixed(1)+'" aria-valuemin="0" aria-valuemax="100"><div class="uca-bar-fill uca-bar-'+b.tone+'" style="width:'+b.pct.toFixed(3)+'%"></div></div></div>').join("");
+ descr.textContent=stats.validated?("Base: "+nfmt(stats.validated)+" SKU con datos verificables en K y L. "+nfmt(stats.unknown)+" SKU por validar, excluidos del cálculo porcentual."):("Aún no hay SKU verificables. Importa el Excel de stock con valores numéricos en las columnas K y L.");
+}
 function evaluate(r){
- let t=reference.get(skuValue(r.sku)),left=remaining(r.expiry),stored=r.received?-remaining(r.received):null,alerts=[];
- if(Number(r.stock)>0){
+ let t=reference.get(skuValue(r.sku)),left=remaining(r.expiry),stored=r.received?-remaining(r.received):null,alerts=[],kind=stockKind(r);
+ if(kind==="stock"){
   if(left!==null){
    if(left<0)alerts.push("VENCIDO");
    else if(left<=daysWindow)alerts.push("PRÓXIMO A VENCER ("+left+" días)");
@@ -42,7 +79,8 @@ function evaluate(r){
   if(t&&t.max>0&&stored!==null&&stored>t.max)alerts.push("TIEMPO MÁX. EN ALMACÉN · "+t.max+" días");
   if(!t)alerts.push("SIN REGLA TVU/TMR");
  }
- const critical=alerts.some(x=>!x.startsWith("SIN ")),status=Number(r.stock)<=0?"none":critical?"critical":alerts.length?"unknown":"ok";
+ if(kind==="unverified")alerts.push("STOCK K/L POR VALIDAR");
+ const critical=alerts.some(x=>!x.startsWith("SIN ")&&!x.includes("POR VALIDAR")),status=kind==="none"?"none":kind==="unverified"?"unknown":critical?"critical":alerts.length?"unknown":"ok";
  return {...r,rule:t,left,alerts,status}
 }
 function refreshRuleState(){
