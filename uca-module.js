@@ -80,8 +80,9 @@ function storageType(r){
  const loc=String(r.location||"").trim().match(/^(\d{1,2})-\d{1,3}-(\d{2})-\d{2}/);
  const aisle=Number(r.aisle||loc?.[1]),level=Number(loc?.[2]);
  if(!loc||!Number.isFinite(aisle))return "";
- if(aisle>=9&&aisle<=13)return "RESERVA_PISO";
- if(aisle>=1&&aisle<=8&&level===1)return "ACTIVO";
+ if(aisle>=9&&aisle<=12)return "RESERVA_PISO";
+ if(aisle>=5&&aisle<=8)return "ACTIVO";
+ if(aisle>=1&&aisle<=4&&level===1)return "ACTIVO";
  if(aisle>=1&&aisle<=4&&level>=2&&level<=5)return "RESERVA";
  return "";
 }
@@ -105,13 +106,22 @@ const UCA_CAPACITIES={
  RESERVA:{"01":416,"02":416,"03":416,"04":416},
  RESERVA_PISO:{"09":66,"10":52,"11":52,"12":26}
 };
+const UCA_AISLE_TYPES={
+ "01":["ACTIVO","RESERVA"],"02":["ACTIVO","RESERVA"],
+ "03":["ACTIVO","RESERVA"],"04":["ACTIVO","RESERVA"],
+ "05":["ACTIVO"],"06":["ACTIVO"],"07":["ACTIVO"],"08":["ACTIVO"],
+ "09":["RESERVA_PISO"],"10":["RESERVA_PISO"],"11":["RESERVA_PISO"],"12":["RESERVA_PISO"]
+};
+const UCA_ALL_AISLES=Object.keys(UCA_AISLE_TYPES);
+function allowedForAisle(aisle,type){return UCA_AISLE_TYPES[aisle]?.includes(type)===true}
+function aisleDescription(aisle){
+ const a=UCA_AISLE_TYPES[aisle]||[];
+ return a.length===2?"Activo + Reserva":a[0]==="RESERVA_PISO"?"Reserva Piso":a[0]==="ACTIVO"?"Activo":"Sin definir";
+}
 function visibleAisles(type){
- const act=Object.keys(UCA_CAPACITIES.ACTIVO),res=Object.keys(UCA_CAPACITIES.RESERVA),floor=Object.keys(UCA_CAPACITIES.RESERVA_PISO);
- if(type==="ACTIVO")return act;
- if(type==="RESERVA")return res;
- if(type==="RESERVA_PISO")return floor;
- if(type==="SOLO_RESERVAS")return [...res,...floor];
- return [...act,...floor];
+ if(type==="ALL")return UCA_ALL_AISLES;
+ return UCA_ALL_AISLES.filter(a=>UCA_AISLE_TYPES[a].some(x=>
+  type==="SOLO_RESERVAS"?(x==="RESERVA"||x==="RESERVA_PISO"):x===type));
 }
 function capacityFor(aisle,type){
  const kinds=type==="ALL"?["ACTIVO","RESERVA","RESERVA_PISO"]:
@@ -126,6 +136,8 @@ function aisleStats(rows,type=aisleType,zone=aisleZone){
  for(const r of rows){
   const a=aisleLabel(r),t=storageType(r),z=stockZone(r);
   if(!a||!t||!group.has(a)){ignored++;continue}
+  // Cada pasillo solo acepta sus tipos físicos; evita sumar reservas a pasillos activos.
+  if(!allowedForAisle(a,t)){ignored++;continue}
   if(type!=="ALL"&&!matchedStorage(t,type))continue;
   if(zone!=="ALL"&&z!==zone)continue;
   const amount=qty(r.stock),loc=String(r.location||"").trim().toUpperCase();
@@ -138,7 +150,7 @@ function aisleStats(rows,type=aisleType,zone=aisleZone){
  }
  const results=[...group.values()].map(x=>({
   aisle:x.aisle,locations:x.locations.size,sku:x.skus.size,units:x.units,
-  capacity:x.capacity,pct:x.capacity?100*x.locations.size/x.capacity:null
+  typeLabel:aisleDescription(x.aisle),capacity:x.capacity,pct:x.capacity?100*x.locations.size/x.capacity:null
  }));
  const used=results.reduce((v,r)=>v+r.locations,0);
  const totalCapacity=results.reduce((v,r)=>v+(r.capacity||0),0);
@@ -164,13 +176,14 @@ function renderAisleChart(){
   const warning=!danger&&r.pct!==null&&r.pct>=85;
   const cls=danger?"red":warning?"orange":"blue",alert=danger?"ALTO RIESGO":warning?"ALERTA":"";
   const displayPct=pct(r.pct);
-  const tooltip="Pasillo "+r.aisle+" · "+nfmt(r.locations)+" UBI ocupadas / "+(r.capacity===null?"capacidad sin configurar":nfmt(r.capacity)+" máximas")+" · "+nfmt(r.sku)+" SKU · "+nfmt(r.units)+" bultos";
+  const tooltip="Pasillo "+r.aisle+" ("+r.typeLabel+") · "+nfmt(r.locations)+" UBI ocupadas / "+(r.capacity===null?"capacidad sin configurar":nfmt(r.capacity)+" máximas")+" · "+nfmt(r.sku)+" SKU · "+nfmt(r.units)+" bultos";
   return '<div class="uca-vertical-item" title="'+tooltip+'">'
    +'<div class="uca-vertical-badge '+(danger?"danger":warning?"warning":"clear")+'">'+(alert||"")+'</div>'
    +'<strong class="uca-vertical-pct">'+displayPct+'</strong>'
    +'<div class="uca-vertical-track" role="meter" aria-label="Pasillo '+r.aisle+'" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+fill.toFixed(1)+'">'
    +'<span class="uca-vertical-fill '+cls+'" style="height:'+fill.toFixed(3)+'%"></span></div>'
    +'<strong class="uca-vertical-label">Pasillo '+r.aisle+'</strong>'
+   +'<small class="uca-vertical-type">'+r.typeLabel+'</small>'
    +'<small class="uca-vertical-detail">'+nfmt(r.locations)+' / '+(r.capacity===null?"—":nfmt(r.capacity))+' UBI</small></div>';
  }).join("");
  if(info){
@@ -180,7 +193,7 @@ function renderAisleChart(){
    +(aisleZone==="ALL"?"":"La zona filtra solo las ubicaciones ocupadas; la capacidad máxima corresponde al pasillo completo. ")
    +"Umbrales: azul <85%, naranja 85–91,9%, rojo ≥92%. "
    +(result.inferred?nfmt(result.inferred)+" registros con tipo inferido por ubicación. ":"")
-   +"Capacidades de referencia: Activo 01–04=104 y 05–08=60; Reserva 01–04=416; Reserva_Piso 09=66, 10=52, 11=52 y 12=26.";
+   +"Distribución: 01–04 Activo + Reserva (104 + 416 UBI), 05–08 solo Activo (60 UBI), 09 Reserva_Piso (66), 10 y 11 Reserva_Piso (52 cada uno), 12 Reserva_Piso (26).";
  }
 }
 
