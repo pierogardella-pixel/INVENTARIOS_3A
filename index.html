@@ -151,6 +151,7 @@ body{background:var(--bg)!important}
 .uca-vertical-item:hover .uca-vertical-fill{filter:brightness(1.09)}
 .uca-vertical-label{color:#223246;font-size:11px;font-weight:850;text-align:center;white-space:nowrap}
 .uca-vertical-detail{color:#7a8a9d;font-size:9px;font-weight:700;white-space:nowrap;text-align:center}
+.uca-vertical-type{color:#60728b;font-size:9px;font-weight:700;text-align:center;white-space:nowrap;min-height:12px}
 .uca-vertical-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 4px 0;margin-top:3px;border-top:1px solid #e2e8f0;color:#6f7f95;font-size:10px}
 .uca-vertical-footer strong{color:#2144a5;font-size:11px}
 .uca-chart-note{margin:11px 5px 0!important;color:#6b7b91!important;font-size:10px!important;line-height:1.55}
@@ -193,7 +194,7 @@ body{background:var(--bg)!important}
  <div class="uca-occupancy-kpis" id="ucaOccupancyMetrics" aria-live="polite"></div>
  <div class="panel uca-chart-panel">
   <div class="uca-vertical-header">
-   <div class="uca-vertical-title"><h3>UCA - POR PASILLOS</h3><p>Ocupación de ubicaciones frente a capacidad nominal por pasillo</p></div>
+   <div class="uca-vertical-title"><h3>UCA - POR PASILLOS 01 AL 12</h3><p>01–04 Activo + Reserva · 05–08 Activo · 09–12 Reserva_Piso</p></div>
    <div class="uca-chart-filters">
     <label for="ucaTypeFilter">Tipo de ubicación
      <select id="ucaTypeFilter" aria-label="Tipo de ubicación UCA">
@@ -412,5 +413,5 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 
 <script src="./sheets-sync.js?v=revision-20261009-pending-fix"></script>
-<script src="./uca-module.js?v=11-uca-vertical-fill"></script>
+<script src="./uca-module.js?v=12-layout-12-aisles"></script>
 </body></html>
