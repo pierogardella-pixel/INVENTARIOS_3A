@@ -112,7 +112,7 @@ const UCA_AISLE_TYPES={
  "05":["ACTIVO"],"06":["ACTIVO"],"07":["ACTIVO"],"08":["ACTIVO"],
  "09":["RESERVA_PISO"],"10":["RESERVA_PISO"],"11":["RESERVA_PISO"],"12":["RESERVA_PISO"]
 };
-const UCA_ALL_AISLES=Object.keys(UCA_AISLE_TYPES);
+const UCA_ALL_AISLES=Object.keys(UCA_AISLE_TYPES).sort((a,b)=>Number(a)-Number(b));
 function allowedForAisle(aisle,type){return UCA_AISLE_TYPES[aisle]?.includes(type)===true}
 function aisleDescription(aisle){
  const a=UCA_AISLE_TYPES[aisle]||[];
